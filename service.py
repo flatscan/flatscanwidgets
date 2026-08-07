@@ -1,18 +1,11 @@
+#!/usr/bin/python
 # coding: utf-8
 
-#################################################################################################
+"""
+Service entry point for Flatscan Widgets.
+"""
 
-from resources.lib.helper import *
-from resources.lib.service_monitor import *
+from resources.lib.service.monitor import main
 
-#################################################################################################
-
-if __name__ == "__main__":
-    ''' Kodi startup tasks
-    '''
-    sync_library_tags()
-    addon_data_cleanup()
-
-    ''' Start service
-    '''
-    Service()
+if __name__ == '__main__':
+    main()

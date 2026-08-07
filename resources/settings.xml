@@ -1,14 +1,26 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <settings>
-	<category label="128">
-        <setting label="19099" type="lsep"/>
-		<setting id="service" label="32016" type="bool" default="true"/>
-        <setting label="14092" type="lsep"/>
-		<setting id="log" label="32002" type="bool" default="false"/>
-        <setting label="32020" type="lsep"/>
-    	<setting label="32017" type="slider" id="service_interval" default="0.5" range="0.1,0.1,2.0" option="float" />
-    	<setting label="32018" type="slider" id="blur_radius" default="2" range="1,1,10" option="int" />
-    	<setting label="32021" type="slider" id="background_interval" default="10" range="5,1,30" option="int" />
-        <setting label="32003" type="action" action="RunScript(script.embuary.helper,action=deleteimgcache)" />
+	<!-- General -->
+	<category label="General">
+		<setting id="service_enabled" type="bool" label="Enable background service" default="true"/>
+		<setting id="debug" type="bool" label="Enable debug logging" default="false"/>
+	</category>
+
+	<!-- Blur Settings -->
+	<category label="Background Blur">
+		<setting id="blur_enabled" type="bool" label="Enable blur effect" default="true"/>
+		<setting id="blur_interval" type="number" label="Check interval (ms)" default="500"/>
+		<setting id="blur_radius" type="number" label="Blur radius" default="20"/>
+		<setting id="blur_saturation" type="text" label="Saturation (0.0-2.0)" default="1.0"/>
+	</category>
+
+	<!-- Fanart Settings -->
+	<category label="Background Fanart">
+		<setting id="fanart_enabled" type="bool" label="Enable fanart rotation" default="true"/>
+		<setting id="fanart_interval" type="number" label="Rotation interval (seconds)" default="30"/>
+		<setting type="lsep" label="Include categories:"/>
+		<setting id="fanart_movies" type="bool" label="Movies" default="true"/>
+		<setting id="fanart_tvshows" type="bool" label="TV Shows" default="true"/>
+		<setting id="fanart_music" type="bool" label="Music Artists" default="true"/>
 	</category>
 </settings>
