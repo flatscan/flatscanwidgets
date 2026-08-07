@@ -1,43 +1,41 @@
 #!/usr/bin/python
+# coding: utf-8
 
-########################
+"""
+Script entry point for Flatscan Widgets.
+Routes RunScript() calls to appropriate modules.
+"""
 
-import xbmcgui
+import sys
+from resources.lib.logger import log
 
-from resources.lib.helper import *
-from resources.lib.utils import *
-from resources.lib.cinema_mode import *
-
-########################
-
-class Main:
-    def __init__(self):
-        self.action = False
-        self._parse_argv()
-
-        if self.action:
-            self.getactions()
-        else:
-            DIALOG.ok(ADDON.getLocalizedString(32000), ADDON.getLocalizedString(32001))
-
-    def _parse_argv(self):
-        args = sys.argv
-
-        for arg in args:
-            if arg == ADDON_ID:
-                continue
-            if arg.startswith('action='):
-                self.action = arg[7:].lower()
-            else:
-                try:
-                    self.params[arg.split("=")[0].lower()] = "=".join(arg.split("=")[1:]).strip()
-                except:
-                    self.params = {}
-
-    def getactions(self):
-        util = globals()[self.action]
-        util(self.params)
+def route_script_call():
+    """Route script calls to appropriate modules."""
+    
+    # Parse arguments
+    args = {}
+    for arg in sys.argv[1:]:
+        if '=' in arg:
+            key, value = arg.split('=', 1)
+            args[key.lower()] = value
+    
+    action = args.get('action', '')
+    log(f'Script called with action: {action}')
+    
+    # Route to appropriate module
+    if action in ['blurimg', 'blur']:
+        # Image module
+        from resources.lib.image.blur import ImageBlur
+        # ... handle blur action
+        
+    elif action in ['tvshowdetails', 'pathstats']:
+        # Info module
+        from resources.lib.info.router import route_action
+        route_action(action, args)
+        
+    else:
+        log(f'Unknown action: {action}')
 
 
 if __name__ == '__main__':
-    Main()
+    route_script_call()
