@@ -1,70 +1,87 @@
 #!/usr/bin/python
+# coding: utf-8
 
-########################
+"""
+Plugin entry point for Flatscan Widgets.
+Handles widget requests via plugin:// URLs.
+"""
 
-import xbmcplugin
-import urllib.parse as urlparse
+import sys
+import urllib.parse
+from resources.lib.addon import ADDON
+from resources.lib.logger import log
+from resources.lib.kodi_utils import set_window_property
+from resources.lib.widgets import MovieWidgets, TVShowWidgets, MixedWidgets
 
-from resources.lib.helper import *
-from resources.lib.plugin_listing import *
-from resources.lib.plugin_content import *
-from resources.lib.plugin_actions import *
+def get_params():
+    """Parse plugin URL parameters."""
+    params = {}
+    if len(sys.argv) > 2:
+        param_string = sys.argv[2][1:]  # Remove leading ?
+        if param_string:
+            pairs = param_string.split('&')
+            for pair in pairs:
+                if '=' in pair:
+                    key, value = pair.split('=', 1)
+                    params[key] = urllib.parse.unquote_plus(value)
+    return params
 
-########################
-
-class Main:
-    def __init__(self):
-        self._parse_argv()
-        self.info = self.params.get('info')
-        self.action = self.params.get('action')
-        if self.info:
-            self.getinfos()
-        elif self.action:
-            self.actions()
-        else:
-            self.listing()
-
-    def _parse_argv(self):
-        base_url = sys.argv[0]
-        path = sys.argv[2]
-
+def router():
+    """Route plugin requests to appropriate handlers."""
+    params = get_params()
+    info = params.get('info', '')
+    
+    log(f'Plugin called with info={info}, params={params}')
+    
+    # Initialize widget classes
+    movies = MovieWidgets()
+    shows = TVShowWidgets()
+    mixed = MixedWidgets()
+    
+    # Route to appropriate handler
+    handlers = {
+        # Movie widgets
+        'inprogressmovies': movies.get_inprogress,
+        'recentmovies': lambda: movies.get_recent(unwatched_only=False),
+        'unwatchedmovies': lambda: movies.get_recent(unwatched_only=True),
+        'randommovies': movies.get_random,
+        
+        # TV show widgets
+        'inprogressepisodes': shows.get_inprogress_episodes,
+        'nextup': shows.get_next_up,
+        'recentepisodes': shows.get_recent_episodes,
+        'recenttvshows': shows.get_recently_updated_shows,
+        
+        # MIXED MEDIA widgets - the unique value of this addon
+        'inprogressmedia': mixed.get_inprogress_media,
+        'suggestions': mixed.get_suggestions_based_on_watched,
+        'byrandomgenre': mixed.get_by_random_genre,
+        'similarmovies': lambda: mixed.get_similar_to_current(
+            params.get('dbid'), 
+            'movie',
+            int(params.get('limit', 20))
+        ),
+        'similartvshows': lambda: mixed.get_similar_to_current(
+            params.get('dbid'),
+            'tvshow', 
+            int(params.get('limit', 20))
+        ),
+        'morebyactor': lambda: mixed.get_more_by_actor(
+            params.get('actor'),
+            int(params.get('limit', 20))
+        ),
+    }
+    
+    handler = handlers.get(info)
+    if handler:
         try:
-            args = path[1:]
-            self.params = dict(urlparse.parse_qsl(args))
-
-            ''' workaround to get the correct values for titles with special characters
-            '''
-            if ('title=\'\"' and '\"\'') in args:
-                start_pos=args.find('title=\'\"')
-                end_pos=args.find('\"\'')
-                clean_title = args[start_pos+8:end_pos]
-                self.params['title'] = clean_title
-
-        except Exception:
-            self.params = {}
-
-    def listing(self):
-        li = list()
-        PluginListing(self.params,li)
-        self._additems(li)
-
-    def getinfos(self):
-        li = list()
-        plugin = PluginContent(self.params,li)
-        self._execute(plugin,self.info)
-        self._additems(li)
-
-    def actions(self):
-        plugin = PluginActions(self.params)
-        self._execute(plugin,self.action)
-
-    def _execute(self,plugin,action):
-        getattr(plugin,action.lower())()
-
-    def _additems(self,li):
-        xbmcplugin.addDirectoryItems(int(sys.argv[1]), li)
-        xbmcplugin.endOfDirectory(handle=int(sys.argv[1]))
-
+            items = handler()
+            # TODO: Convert items to ListItems and add to directory
+            log(f'Handler returned {len(items) if isinstance(items, list) else "dict with " + str(len(items.get("items", []))) + " items"}')
+        except Exception as e:
+            log(f'Handler error: {e}')
+    else:
+        log(f'Unknown info type: {info}')
 
 if __name__ == '__main__':
-    Main()
+    router()
