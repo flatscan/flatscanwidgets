@@ -1,0 +1,23 @@
+{
+    "python.defaultInterpreterPath": "python3",
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/resources/lib"
+    ],
+    "python.analysis.autoImportCompletions": true,
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "**/.git": true
+    },
+    "files.watcherExclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true
+    },
+    "[python]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "ms-python.python"
+    },
+    "[xml]": {
+        "editor.formatOnSave": true
+    }
+}
