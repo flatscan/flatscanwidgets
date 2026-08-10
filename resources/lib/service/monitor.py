@@ -3,8 +3,15 @@
 
 """
 Main service monitor.
-Coordinates background tasks and responds to events.
 """
+
+import sys
+import os
+
+# Add addon root to path if needed (for when this module is imported directly)
+addon_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if addon_root not in sys.path:
+    sys.path.insert(0, addon_root)
 
 import xbmc
 import xbmcgui
@@ -12,7 +19,6 @@ from resources.lib.addon import ADDON
 from resources.lib.logger import log
 from resources.lib.service.blur_service import BlurService
 from resources.lib.service.fanart_service import FanartService
-
 
 class ServiceMonitor(xbmc.Monitor):
     """

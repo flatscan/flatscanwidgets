@@ -3,11 +3,17 @@
 
 """
 Script entry point for Flatscan Widgets.
-Handles RunScript() calls from skins.
 """
 
 import sys
+import os
 import urllib.parse
+
+# Add addon path to Python path
+addon_path = os.path.dirname(os.path.abspath(__file__))
+if addon_path not in sys.path:
+    sys.path.insert(0, addon_path)
+
 from resources.lib.addon import ADDON
 from resources.lib.logger import log
 
