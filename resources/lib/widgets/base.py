@@ -87,3 +87,10 @@ class BaseWidget:
             'order': 'descending',
             'method': 'lastplayed'
         }
+
+    def get_recentlyaired_sort(self):
+            """Get sort by year, descending."""
+            return {
+                'order': 'descending',
+                'method': 'year'
+            }

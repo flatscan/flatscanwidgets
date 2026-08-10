@@ -39,6 +39,74 @@ class TVShowWidgets(BaseWidget):
     ]
     
     # ========== EPISODE WIDGETS ==========
+
+    def get_recently_aired(self, days=90, limit=20):
+        """
+        Get episodes that aired in the last X days.
+        """
+        from datetime import datetime, timedelta
+        
+        log(f'=== Recently Aired: Starting (last {days} days) ===')
+        
+        # Calculate cutoff date
+        cutoff_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+        log(f'Cutoff date: {cutoff_date}')
+        
+        # Get episodes - try without firstaired first to see if it exists
+        result = json_rpc_call('VideoLibrary.GetEpisodes', {
+            'properties': self.EPISODE_PROPERTIES,
+            'sort': self.get_recentlyaired_sort(),
+            'limits': {'start': 0, 'end': 50}
+        })
+        
+        episodes = result.get('result', {}).get('episodes', [])
+        log(f'Total episodes retrieved: {len(episodes)}')
+        
+        if not episodes:
+            log('No episodes found in library')
+            return []
+        
+        # Debug: Log first few episodes to see data format
+        for i, ep in enumerate(episodes[:3]):
+            log(f'Episode {i}: {ep.get("showtitle")} S{ep.get("season")}E{ep.get("episode")} - firstaired: "{ep.get("firstaired")}"')
+        
+        # Filter episodes
+        recent_episodes = []
+        for ep in episodes:
+            airdate = ep.get('firstaired', '')
+            
+            # Skip if no airdate
+            if not airdate:
+                continue
+                
+            # Handle different date formats
+            try:
+                # Kodi usually returns YYYY-MM-DD
+                if airdate >= cutoff_date:
+                    ep['mediatype'] = 'episode'
+                    
+                    # Get season artwork
+                    show_id = ep.get('tvshowid')
+                    season_num = ep.get('season', 1)
+                    season_art = self._get_season_art(show_id, season_num)
+                    
+                    ep['art'] = {
+                        'thumb': ep.get('thumbnail', ''),
+                        'poster': season_art.get('poster', ''),
+                        'season.poster': season_art.get('poster', ''),
+                        'fanart': season_art.get('fanart', ''),
+                        'banner': season_art.get('banner', ''),
+                    }
+                    
+                    recent_episodes.append(ep)
+                    
+                    if len(recent_episodes) >= limit:
+                        break
+            except Exception as e:
+                log(f'Error processing episode airdate "{airdate}": {e}')
+        
+        log(f'=== Recently Aired: Returning {len(recent_episodes)} episodes ===')
+        return recent_episodes
     
     def get_inprogress_episodes(self, limit=20):
         """Get episodes currently in progress with season posters."""

@@ -49,7 +49,7 @@ def get_params():
 
 def create_listitem(item_data, content_type):
     """
-    Create a Kodi ListItem from widget data.
+    Create a Kodi ListItem from widget data using modern InfoTagVideo API.
     """
     # Determine content type from item if not specified
     if content_type == 'video' and item_data.get('mediatype'):
@@ -61,7 +61,6 @@ def create_listitem(item_data, content_type):
         label2 = f"S{item_data.get('season', 0)}E{item_data.get('episode', 0)}"
     elif content_type == 'tvshow':
         label = item_data.get('title', '')
-        # Show year and episode count
         year = item_data.get('year', '')
         episodes = item_data.get('episode', 0)
         watched = item_data.get('watchedepisodes', 0)
@@ -81,7 +80,6 @@ def create_listitem(item_data, content_type):
     li = xbmcgui.ListItem(label=label, label2=label2)
     
     # Set art based on content type
-    art = {}
     if content_type == 'tvshow':
         art = {
             'poster': item_data.get('art', {}).get('poster', ''),
@@ -89,16 +87,7 @@ def create_listitem(item_data, content_type):
             'banner': item_data.get('art', {}).get('banner', ''),
             'clearlogo': item_data.get('art', {}).get('clearlogo', ''),
             'landscape': item_data.get('art', {}).get('landscape', ''),
-            'thumb': item_data.get('art', {}).get('poster', ''),  # Use poster as thumb
-        }
-    elif content_type == 'episode':
-    # Use season poster (stored in 'poster') as main art
-        art = {
-            'thumb': item_data.get('art', {}).get('thumb', ''),  # Small episode thumb
-            'poster': item_data.get('art', {}).get('poster', ''),  # Season poster (main)
-            'fanart': item_data.get('art', {}).get('fanart', ''),
-            'banner': item_data.get('art', {}).get('banner', ''),
-            'clearlogo': item_data.get('art', {}).get('clearlogo', ''),
+            'thumb': item_data.get('art', {}).get('poster', ''),
         }
     else:
         art = {
@@ -111,53 +100,52 @@ def create_listitem(item_data, content_type):
         }
     li.setArt(art)
     
-    # Set info labels based on content type
+    # Use new InfoTagVideo API instead of deprecated setInfo()
     if content_type == 'tvshow':
-        info_labels = {
-            'title': item_data.get('title', ''),
-            'tvshowtitle': item_data.get('title', ''),
-            'plot': item_data.get('plot', ''),
-            'rating': item_data.get('rating', 0),
-            'genre': item_data.get('genre', []),
-            'studio': item_data.get('studio', []),
-            'mpaa': item_data.get('mpaa', ''),
-            'episode': item_data.get('episode', 0),
-            'watchedepisodes': item_data.get('watchedepisodes', 0),
-            'year': item_data.get('year', ''),
-        }
-        li.setInfo('video', info_labels)
-        li.setIsFolder(True)  # TV shows are folders
+        infotag = li.getVideoInfoTag()
+        infotag.setTitle(item_data.get('title', ''))
+        infotag.setPlot(item_data.get('plot', ''))
+        infotag.setRating(float(item_data.get('rating', 0)))
+        infotag.setGenres(item_data.get('genre', []))
+        infotag.setStudios(item_data.get('studio', []))
+        infotag.setMpaa(item_data.get('mpaa', ''))
+        infotag.setEpisode(int(item_data.get('episode', 0)))
+        infotag.setPlaycount(int(item_data.get('watchedepisodes', 0)))
+        infotag.setYear(int(item_data.get('year', 0)) if item_data.get('year') else 0)
+        li.setIsFolder(True)
         
     elif content_type == 'episode':
-        info_labels = {
-            'title': item_data.get('title', ''),
-            'tvshowtitle': item_data.get('showtitle', ''),
-            'plot': item_data.get('plot', ''),
-            'episode': item_data.get('episode', 0),
-            'season': item_data.get('season', 0),
-            'rating': item_data.get('rating', 0),
-            'firstaired': item_data.get('firstaired', ''),
-            'duration': item_data.get('runtime', 0),
-        }
-        li.setInfo('video', info_labels)
+        infotag = li.getVideoInfoTag()
+        infotag.setTitle(item_data.get('title', ''))
+        infotag.setTvShowTitle(item_data.get('showtitle', ''))
+        infotag.setPlot(item_data.get('plot', ''))
+        infotag.setEpisode(int(item_data.get('episode', 0)))
+        infotag.setSeason(int(item_data.get('season', 0)))
+        infotag.setRating(float(item_data.get('rating', 0)))
+        infotag.setFirstAired(item_data.get('firstaired', ''))
+        infotag.setDuration(int(item_data.get('runtime', 0)))
         li.setProperty('IsPlayable', 'true')
         
     elif content_type == 'movie':
-        info_labels = {
-            'title': item_data.get('title', ''),
-            'plot': item_data.get('plot', ''),
-            'rating': item_data.get('rating', 0),
-            'year': item_data.get('year', ''),
-            'genre': item_data.get('genre', []),
-            'mpaa': item_data.get('mpaa', ''),
-            'duration': item_data.get('runtime', 0),
-        }
-        li.setInfo('video', info_labels)
+        infotag = li.getVideoInfoTag()
+        infotag.setTitle(item_data.get('title', ''))
+        infotag.setPlot(item_data.get('plot', ''))
+        infotag.setRating(float(item_data.get('rating', 0)))
+        infotag.setYear(int(item_data.get('year', 0)) if item_data.get('year') else 0)
+        infotag.setGenres(item_data.get('genre', []))
+        infotag.setMpaa(item_data.get('mpaa', ''))
+        infotag.setDuration(int(item_data.get('runtime', 0)))
         li.setProperty('IsPlayable', 'true')
     
     # Add DBID property
     dbid = item_data.get('tvshowid') or item_data.get('movieid') or item_data.get('episodeid', '')
     li.setProperty('dbid', str(dbid))
+    
+    # Resume info if available
+    resume = item_data.get('resume', {})
+    if resume and resume.get('position', 0) > 0:
+        li.setProperty('ResumeTime', str(resume.get('position', 0)))
+        li.setProperty('TotalTime', str(resume.get('total', 0)))
     
     return li
 
@@ -257,6 +245,7 @@ def show_tvshows_listing():
     ('In Progress Episodes', 'inprogressepisodes'),
     ('Next Up', 'nextup'),
     ('Recent Episodes', 'recentepisodes'),
+    ('Recently Aired Episodes', 'recentlyaired'),
     ('Recently Updated Shows', 'recenttvshows'),
     ('TV Show Genres', 'tvshowgenres'),
     ('Random Genre', 'tvshowsbyrandomgenre'),
@@ -411,10 +400,10 @@ def router():
             items = shows.get_suggestions(limit=limit)
             add_items_to_directory(items, 'tvshow', 'Suggested TV Shows')
 
-        elif info == 'recentlyairedepisodes':
-            days = int(params.get('days', 90))
-            items = shows.get_recently_aired_episodes(limit=limit, days=days)
-            add_items_to_directory(items, 'episode', f'Recently Aired (Last {days} Days)')
+        elif info == 'recentlyaired':
+            days = int(params.get('days', 90))  # Allow custom days via parameter
+            items = shows.get_recently_aired(days=days, limit=limit)
+            add_items_to_directory(items, 'episode', 'Recently Aired')
             
         elif info == 'tvsimilar':
             dbid = params.get('dbid')
