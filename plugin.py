@@ -61,15 +61,18 @@ def create_listitem(item_data, content_type):
         label2 = f"S{item_data.get('season', 0)}E{item_data.get('episode', 0)}"
     elif content_type == 'tvshow':
         label = item_data.get('title', '')
-        year = item_data.get('year', '')
-        episodes = item_data.get('episode', 0)
-        watched = item_data.get('watchedepisodes', 0)
-        label2 = f"{year} • {watched}/{episodes} eps" if year else f"{watched}/{episodes} eps"
+        episode_count = item_data.get('episode_count', 0)
+        # year = item_data.get('year', '')
+        # episodes = item_data.get('episode', 0)
+        # watched = item_data.get('watchedepisodes', 0)
+        label2 = f"{episode_count} new episodes"
     elif content_type == 'season':
-        label = f"Season {item_data.get('season', 0)}"
-        episodes = item_data.get('episode', 0)
-        watched = item_data.get('watchedepisodes', 0)
-        label2 = f"{watched}/{episodes} episodes"
+        # Custom label: "Show Name - Season X" 
+        showtitle = item_data.get('tvshowtitle', '')
+        season_title = item_data.get('season_title', '')
+        episode_count = item_data.get('episode_count', 0)
+        label = f"{showtitle} - {season_title}"
+        label2 = f"{episode_count} new episodes"
     elif content_type == 'movie':
         label = item_data.get('title', '')
         label2 = str(item_data.get('year', ''))
@@ -112,6 +115,7 @@ def create_listitem(item_data, content_type):
         infotag.setEpisode(int(item_data.get('episode', 0)))
         infotag.setPlaycount(int(item_data.get('watchedepisodes', 0)))
         infotag.setYear(int(item_data.get('year', 0)) if item_data.get('year') else 0)
+        infotag.setFirstAired(item_data.get('dateadded', ''))
         li.setIsFolder(True)
         
     elif content_type == 'episode':
@@ -136,6 +140,21 @@ def create_listitem(item_data, content_type):
         infotag.setMpaa(item_data.get('mpaa', ''))
         infotag.setDuration(int(item_data.get('runtime', 0)))
         li.setProperty('IsPlayable', 'true')
+
+    elif content_type == 'season':
+        infotag = li.getVideoInfoTag()
+        infotag.setTitle(item_data.get('title', ''))
+        infotag.setPlot(item_data.get('plot', ''))
+        infotag.setSeason(int(item_data.get('season', 0)))
+        infotag.setFirstAired(item_data.get('dateadded', ''))
+        infotag.setMediaType('season')
+        
+        # Respect the playable flag from _set_navigation
+        if item_data.get('is_playable'):
+            li.setProperty('IsPlayable', 'true')
+            li.setIsFolder(False)
+        else:
+            li.setIsFolder(True)
     
     # Add DBID property
     dbid = item_data.get('tvshowid') or item_data.get('movieid') or item_data.get('episodeid', '')
@@ -186,13 +205,21 @@ def add_items_to_directory(items, content_type, category=''):
                 url = f'videodb://movies/titles/{item.get("movieid", "")}'
             is_folder = False
             
-        elif item_type == 'tvshow':
-            url = f'videodb://tvshows/titles/{dbid}/'
-            is_folder = True
-            
         elif item_type == 'season':
-            url = f'videodb://tvshows/titles/{item.get("tvshowid")}/{item.get("season")}/'
-            is_folder = True
+            if item.get('is_playable'):
+                url = file_path  # Use the file path from _set_navigation
+                is_folder = False
+            else:
+                url = f'videodb://tvshows/titles/{item.get("tvshowid")}/{item.get("season")}/'
+                is_folder = True
+
+        elif item_type == 'tvshow':
+            if item.get('is_playable'):
+                url = file_path
+                is_folder = False
+            else:
+                url = f'videodb://tvshows/titles/{dbid}/'
+                is_folder = True
             
         else:
             url = ''
@@ -247,6 +274,7 @@ def show_tvshows_listing():
     ('Recent Episodes', 'recentepisodes'),
     ('Recently Aired Episodes', 'recentlyaired'),
     ('Recently Updated Shows', 'recenttvshows'),
+    ('Recently Added Grouped', 'recentlyaddedgrouped'),
     ('TV Show Genres', 'tvshowgenres'),
     ('Random Genre', 'tvshowsbyrandomgenre'),
     ('Suggestions', 'tvsuggestions'),
@@ -303,7 +331,7 @@ def show_mixed_listing():
     xbmcplugin.endOfDirectory(HANDLE)
 
 def router():
-    log('=== ROUTER CALLED ===', force=True)   # <-- Add this line
+    log('=== ROUTER CALLED ===')   # <-- Add this line
     """Route plugin requests to appropriate handlers."""
     params = get_params()
     info = params.get('info', '')
@@ -327,15 +355,14 @@ def router():
         return
     
     # Get limit parameter (default 20)
-    limit = int(params.get('limit', 20))
+    limit = int(params.get('limit', 999))
     
     # Initialize widget classes
     movies = MovieWidgets()
     shows = TVShowWidgets()
     mixed = MixedWidgets()
     
-    # Get limit parameter (default 20)
-    limit = int(params.get('limit', 20))
+  
     
     # Route to appropriate handler
     try:
@@ -429,6 +456,12 @@ def router():
                 add_items_to_directory(items, 'episode', 'Episodes')
             else:
                 xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+
+        elif info == 'recentlyaddedgrouped':
+            days = int(params.get('days', 30))
+            # navigate_to now comes from settings, not URL
+            items = shows.get_recently_added_grouped(days=days, limit=limit)
+            add_items_to_directory(items, 'mixed', 'Recently Added')
 
         
                     

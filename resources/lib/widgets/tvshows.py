@@ -5,11 +5,15 @@
 TV show widgets - All TV-related content.
 """
 
+from logging import INFO
 import random
 from .base import BaseWidget
 from resources.lib.kodi_utils import json_rpc_call
 from resources.lib.logger import log
+from resources.lib.addon import get_setting
 
+# Test log right after imports
+log('=== TVSHOWS MODULE LOADED ===', 'INFO')
 
 class TVShowWidgets(BaseWidget):
     """TV show and episode widgets."""
@@ -35,10 +39,296 @@ class TVShowWidgets(BaseWidget):
     
     SEASON_PROPERTIES = [
         'season', 'episode', 'watchedepisodes', 'art', 
-        'thumbnail', 'fanart', 'playcount', 'tvshowid'
+        'thumbnail', 'fanart', 'playcount', 'tvshowid',
+        'title', 'showtitle'
     ]
+
+    def __init__(self, handle=None):
+        """Initialize with season artwork cache."""
+        super().__init__(handle)
+        self._season_art_cache = {}
     
     # ========== EPISODE WIDGETS ==========
+
+    def get_recently_added_grouped(self, days=60, limit=999, navigate_to=None):
+        """
+        Get recently added episodes grouped by time clusters.
+        Episodes added within 24h of each other are grouped together.
+        """
+        from datetime import datetime, timedelta
+        from collections import defaultdict
+        
+        if navigate_to is None:
+            raw_setting = get_setting('recentlyadded.navigation', 'Browse')
+            log(f'Setting raw value: "{raw_setting}"', 'INFO')
+            navigate_to = 'first' if raw_setting == 'First Episode' else 'browse'
+            log(f'Navigate to resolved: "{navigate_to}"', 'INFO')
+        
+        cutoff = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+        
+        # Get recently added episodes
+        result = json_rpc_call('VideoLibrary.GetEpisodes', {
+            'properties': self.EPISODE_PROPERTIES,
+            'sort': self.get_recent_sort(),
+            'limits': {'start': 0, 'end': 999}
+        })
+        
+        episodes = result.get('result', {}).get('episodes', [])
+        
+        # Filter to recent
+        recent_eps = [
+            ep for ep in episodes 
+            if ep.get('dateadded', '')[:10] >= cutoff
+        ]
+        
+        # Group episodes into time clusters (within 24h of cluster start)
+        clusters = []
+        current_cluster = []
+        cluster_start_time = None
+        
+        for ep in recent_eps:
+            ep_time = datetime.fromisoformat(ep.get('dateadded', '').replace('Z', '+00:00'))
+            
+            if cluster_start_time is None:
+                # Start new cluster
+                cluster_start_time = ep_time
+                current_cluster = [ep]
+            elif (cluster_start_time - ep_time).total_seconds() <= 86400:  # 24h
+                # Within 24h of cluster start, add to current cluster
+                current_cluster.append(ep)
+            else:
+                # More than 24h from cluster start, save and start new cluster
+                clusters.append(current_cluster)
+                cluster_start_time = ep_time
+                current_cluster = [ep]
+        
+        # Don't forget the last cluster
+        if current_cluster:
+            clusters.append(current_cluster)
+        
+        # Now process each cluster with the season/show grouping logic
+        items = []
+        for cluster in clusters:
+            # Group by show within this time cluster
+            show_groups = defaultdict(list)
+            for ep in cluster:
+                show_groups[ep.get('tvshowid')].append(ep)
+            
+            for show_id, show_eps in show_groups.items():
+                # Now apply season vs show grouping logic
+                season_groups = defaultdict(list)
+                for ep in show_eps:
+                    season_groups[ep.get('season')].append(ep)
+                
+                if len(season_groups) == 1:
+                    # Single season cluster
+                    season_num = list(season_groups.keys())[0]
+                    season_eps = season_groups[season_num]
+                    season_eps.sort(key=lambda x: x.get('episode', 0))
+                    season_id = season_eps[0].get('seasonid')
+                    
+                    if len(season_eps) == 1:
+                        # Single episode - return as-is
+                        ep = season_eps[0]
+                        ep['mediatype'] = 'episode'
+                        season_art = self._get_season_art(show_id, season_num)
+                        ep['art'] = {
+                            'thumb': ep.get('thumbnail', ''),
+                            'poster': season_art.get('poster', ''),
+                            'fanart': season_art.get('fanart', ''),
+                        }
+                        items.append(ep)
+                    else:
+                        # Multiple episodes in season - create season group
+                        item = self._create_season_group(show_id, season_id, season_num, season_eps)
+                        self._set_navigation(item, navigate_to)
+                        items.append(item)
+                else:
+                    # Multiple seasons - create show group
+                    item = self._create_show_group(show_id, show_eps, season_groups)
+                    self._set_navigation(item, navigate_to)
+                    items.append(item)
+                
+                if len(items) >= limit:
+                    break
+            
+            if len(items) >= limit:
+                break
+        
+        return items
+
+    def _create_season_group(self, show_id, season_id, season_num, episodes):
+        """Create a season-level group item."""
+        season_info = self._get_season_details(season_id)
+        season_art = self._get_season_art(show_id, season_num)
+        
+        # Sort episodes by episode number
+        sorted_eps = sorted(episodes, key=lambda x: x.get('episode', 0))
+        first_ep = sorted_eps[0]
+        show_title = season_info.get('showtitle', '')
+        
+        # Build the title: use season title if available, otherwise "Season X"
+        season_title = season_info.get('title', '')
+        log(f'Season title: {season_title}', 'DEBUG')
+        display_title = f"{show_title} - {season_title}"
+        
+         
+        
+        # Build episode list for plot
+        ep_list = '\n'.join([
+            f"Episode {e.get('episode')}: {e.get('title', 'Unknown')}" 
+            for e in sorted_eps
+        ])
+        
+        # Construct plot
+        plot = f"{ep_list}"
+        
+        
+        return {
+            'title': display_title,
+            'tvshowtitle': show_title,
+            'plot': plot,
+            'tvshowid': show_id,
+            'season': season_num,
+            'season_title': season_title,  # Store for potential skin use
+            # 'episode': sorted_eps[0].get('episode'),
+            'first_episode_file': first_ep.get('file'),
+            'dateadded': sorted_eps[0].get('dateadded'),
+            'mediatype': 'season',
+            'is_group': True,
+            'group_type': 'season',
+            'episode_count': len(episodes),
+            'art': {
+                'poster': season_art.get('poster', ''),
+                'fanart': season_art.get('fanart', ''),
+                'banner': season_art.get('banner', ''),
+            }
+        }
+
+    def _create_show_group(self, show_id, episodes, season_groups):
+        """Create a show-level group item."""
+        sorted_seasons = sorted(season_groups.items())
+        
+        season_summary = '\n'.join([
+            f"Season {s}: {len(eps)} episodes" 
+            for s, eps in sorted_seasons
+        ])
+        
+        show_info = self._get_show_details(show_id)
+        
+        # Find first episode
+        all_eps = []
+        for eps in season_groups.values():
+            all_eps.extend(eps)
+        all_eps.sort(key=lambda x: (x.get('season'), x.get('episode')))
+        first_ep = all_eps[0]
+    
+        plot = show_info.get('plot', '')
+        if plot:
+            plot = f"{plot}\n{season_summary}"
+        else:
+            plot = season_summary
+        
+        return {
+            'title': show_info.get('title', ''),
+            'tvshowtitle': show_info.get('title', ''),
+            'plot': plot,
+            'tvshowid': show_id,
+            'season': first_ep.get('season'),
+            # 'episode': first_ep.get('episode'),
+            'first_episode_file': first_ep.get('file'),
+            'dateadded': first_ep.get('dateadded'),
+            'mediatype': 'tvshow',
+            'is_group': True,
+            'group_type': 'show',
+            'season_count': len(season_groups),
+            'episode_count': len(episodes),
+            'art': show_info.get('art', {})
+        }
+
+    def _set_navigation(self, item, navigate_to):
+        """Set navigation URL based on preference."""
+        show_id = item['tvshowid']
+        
+        if navigate_to == 'first':
+            # Use stored first episode file from the group
+            item['file'] = item.get('first_episode_file', '')
+            
+            if not item['file']:
+                # Fallback: fetch from library
+                log(f'Warning: first_episode_file not set for {item.get("title")}, fetching from library')
+                result = json_rpc_call('VideoLibrary.GetEpisodes', {
+                    'tvshowid': int(show_id),
+                    'properties': ['file', 'season', 'episode'],
+                    'sort': {'method': 'episode'},
+                    'limits': {'start': 0, 'end': 1}
+                })
+                eps = result.get('result', {}).get('episodes', [])
+                if eps:
+                    item['file'] = eps[0].get('file')
+            
+            item['is_playable'] = True
+            log(f'Set playable file: {item.get("file")}')
+            
+        else:
+            # Navigate to browse view
+            if item['group_type'] == 'season':
+                item['file'] = f'videodb://tvshows/titles/{show_id}/{item["season"]}/'
+            else:
+                item['file'] = f'videodb://tvshows/titles/{show_id}/'
+            item['is_playable'] = False
+            log(f'Set browse URL: {item["file"]}')
+
+    def _get_season_details(self, season_id):
+        """Get season details directly by season ID."""
+        log(f'Getting season details for season_id: {season_id} (type: {type(season_id)})', 'DEBUG')
+        
+        if not season_id:
+            log('Season ID is empty/None!', 'WARNING')
+            return {'title': '', 'art': {}}
+        
+        try:
+            log(f'SEASON_PROPERTIES: {self.SEASON_PROPERTIES}', 'DEBUG')
+            
+            result = json_rpc_call('VideoLibrary.GetSeasonDetails', {
+                'seasonid': int(season_id),
+                'properties': self.SEASON_PROPERTIES,
+            })
+            
+            log(f'Raw result: {result}', 'DEBUG')
+            
+            season = result.get('result', {}).get('seasondetails', {})
+            log(f'Season details dict: {season}', 'DEBUG')
+            
+            title = season.get('title', '')
+            log(f'Extracted title: "{title}"', 'DEBUG')
+
+            showtitle = season.get('showtitle', '')
+            log(f'Extracted showtitle: "{showtitle}"', 'DEBUG')
+            
+            return {
+                'title': title,
+                'art': season.get('art', {}),
+                'showtitle': showtitle
+            }
+        except Exception as e:
+            log(f'Failed to get season details: {e}', 'ERROR')
+            import traceback
+            log(traceback.format_exc(), 'ERROR')
+        
+        return {'title': '', 'art': {}, 'showtitle': ''}
+
+    def _get_show_details(self, show_id):
+        """Get TV show details."""
+        try:
+            result = json_rpc_call('VideoLibrary.GetTVShowDetails', {
+                'tvshowid': int(show_id),
+                'properties': self.TVSHOW_PROPERTIES,
+            })
+            return result.get('result', {}).get('tvshowdetails', {})
+        except Exception as e:
+            log(f'Failed to get show details: {e}')
+        return {}
 
     def get_recently_aired(self, days=90, limit=20):
         """
@@ -213,25 +503,28 @@ class TVShowWidgets(BaseWidget):
             return []
 
     def _get_season_art(self, tvshowid, season_num):
-        """
-        Get artwork for a specific season.
-        """
-        try:
-            result = json_rpc_call('VideoLibrary.GetSeasons', {
-                'tvshowid': int(tvshowid),
-                'properties': ['art', 'season'],
-            })
-            
-            seasons = result.get('result', {}).get('seasons', [])
-            
-            for season in seasons:
-                if season.get('season') == season_num:
-                    return season.get('art', {})
-                    
-        except Exception as e:
-            log(f'Failed to get season art: {e}')
+        """Get season artwork with simple per-season caching."""
+        cache_key = (tvshowid, season_num)
         
-        return {}
+        if cache_key not in self._season_art_cache:
+            try:
+                result = json_rpc_call('VideoLibrary.GetSeasons', {
+                    'tvshowid': int(tvshowid),
+                    'properties': ['art', 'season'],
+                })
+                
+                seasons = result.get('result', {}).get('seasons', [])
+                
+                # Cache all seasons from this show
+                for season in seasons:
+                    key = (tvshowid, season.get('season'))
+                    self._season_art_cache[key] = season.get('art', {})
+                    
+            except Exception as e:
+                log(f'Failed to get season art: {e}')
+                return {}
+        
+        return self._season_art_cache.get(cache_key, {})
         
     def get_recent_episodes(self, limit=20):
         """Get recently added episodes with season posters."""

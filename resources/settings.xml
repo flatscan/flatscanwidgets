@@ -23,4 +23,8 @@
 		<setting id="fanart_tvshows" type="bool" label="TV Shows" default="true"/>
 		<setting id="fanart_music" type="bool" label="Music Artists" default="true"/>
 	</category>
+
+	<category label="Widget Behavior">
+        <setting id="recentlyadded.navigation" type="labelenum" label="Recently Added Navigation" values="Browse|First Episode" default="Browse"/>
+    </category>
 </settings>

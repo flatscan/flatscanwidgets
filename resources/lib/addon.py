@@ -30,5 +30,13 @@ def ensure_directories():
         if not os.path.exists(path):
             os.makedirs(path)
 
+def get_setting(key, default=''):
+    """Get addon setting value."""
+    return ADDON.getSetting(key) or default
+
+def get_bool_setting(key, default=False):
+    """Get boolean setting."""
+    return ADDON.getSettingBool(key) if hasattr(ADDON, 'getSettingBool') else default
+
 # Call on import
 ensure_directories()
