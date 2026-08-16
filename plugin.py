@@ -21,7 +21,7 @@ if addon_path not in sys.path:
 
 import xbmcgui
 import xbmcplugin
-from resources.lib.addon import ADDON
+from resources.lib.addon import ADDON, get_setting
 from resources.lib.logger import log
 
 # WIDGET IMPORTS - Make sure these are here
@@ -119,16 +119,31 @@ def create_listitem(item_data, content_type):
         li.setIsFolder(True)
         
     elif content_type == 'episode':
-        infotag = li.getVideoInfoTag()
-        infotag.setTitle(item_data.get('title', ''))
-        infotag.setTvShowTitle(item_data.get('showtitle', ''))
-        infotag.setPlot(item_data.get('plot', ''))
-        infotag.setEpisode(int(item_data.get('episode', 0)))
-        infotag.setSeason(int(item_data.get('season', 0)))
-        infotag.setRating(float(item_data.get('rating', 0)))
-        infotag.setFirstAired(item_data.get('firstaired', ''))
-        infotag.setDuration(int(item_data.get('runtime', 0)))
-        li.setProperty('IsPlayable', 'true')
+        # Check if this is a Sonarr upcoming episode (no file)
+        if not item_data.get('file'):
+            # Sonarr upcoming - not playable, just informational
+            infotag = li.getVideoInfoTag()
+            infotag.setTitle(item_data.get('title', ''))
+            infotag.setTvShowTitle(item_data.get('showtitle', ''))
+            infotag.setPlot(item_data.get('plot', ''))
+            infotag.setSeason(int(item_data.get('season', 0)))
+            infotag.setEpisode(int(item_data.get('episode', 0)))
+            infotag.setFirstAired(item_data.get('firstaired', ''))
+            infotag.setMediaType('episode')
+            # Not playable - no file yet
+            li.setProperty('IsPlayable', 'false')
+        else:
+            # Regular episode with file - playable
+            infotag = li.getVideoInfoTag()
+            infotag.setTitle(item_data.get('title', ''))
+            infotag.setTvShowTitle(item_data.get('showtitle', ''))
+            infotag.setPlot(item_data.get('plot', ''))
+            infotag.setEpisode(int(item_data.get('episode', 0)))
+            infotag.setSeason(int(item_data.get('season', 0)))
+            infotag.setRating(float(item_data.get('rating', 0)))
+            infotag.setFirstAired(item_data.get('firstaired', ''))
+            infotag.setDuration(int(item_data.get('runtime', 0)))
+            li.setProperty('IsPlayable', 'true')
         
     elif content_type == 'movie':
         infotag = li.getVideoInfoTag()
@@ -190,14 +205,20 @@ def add_items_to_directory(items, content_type, category=''):
         dbid = item.get('tvshowid') or item.get('movieid') or item.get('episodeid', '')
         
         if item_type == 'episode':
+            is_playable = item.get('is_playable', True)  # Default to playable for regular episodes
             # Episodes need special handling - use file path or library ID
-            if file_path:
+            if file_path and is_playable:
                 url = file_path  # Direct file path works best
             else:
                 # Fallback to videodb ID
-                url = f'videodb://episodes/titles/{item.get("episodeid", "")}'
+                url = ''
+                is_playable = False
+
             is_folder = False
-            
+
+            li = create_listitem(item, item_type)
+            li.setProperty('IsPlayable', 'true' if is_playable else 'false')
+                        
         elif item_type == 'movie':
             if file_path:
                 url = file_path
@@ -275,6 +296,7 @@ def show_tvshows_listing():
     ('Recently Aired Episodes', 'recentlyaired'),
     ('Recently Updated Shows', 'recenttvshows'),
     ('Recently Added Grouped', 'recentlyaddedgrouped'),
+    ('Upcoming Episodes', 'upcomingepisodes'),
     ('TV Show Genres', 'tvshowgenres'),
     ('Random Genre', 'tvshowsbyrandomgenre'),
     ('Suggestions', 'tvsuggestions'),
@@ -463,7 +485,14 @@ def router():
             items = shows.get_recently_added_grouped(days=days, limit=limit)
             add_items_to_directory(items, 'mixed', 'Recently Added')
 
-        
+        elif info == 'upcomingepisodes':
+            if not get_setting('sonarr.enabled', 'false') == 'true':
+                log('Sonarr not enabled, cannot show upcoming episodes')
+                xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+            else:
+                days = int(params.get('days', get_setting('sonarr.days', '7')))
+                items = shows.get_sonarr_upcoming(days=days)
+                add_items_to_directory(items, 'episode', 'Upcoming Episodes')
                     
         # MIXED MEDIA ROUTES
         

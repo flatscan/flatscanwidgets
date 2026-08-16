@@ -27,4 +27,11 @@
 	<category label="Widget Behavior">
         <setting id="recentlyadded.navigation" type="labelenum" label="Recently Added Navigation" values="Browse|First Episode" default="Browse"/>
     </category>
+
+	<category label="Sonarr Integration">
+		<setting id="sonarr.enabled" type="bool" label="Enable Sonarr" default="false"/>
+		<setting id="sonarr.url" type="text" label="Sonarr URL" default="http://localhost:8989"/>
+		<setting id="sonarr.apikey" type="text" label="Sonarr API Key"/>
+		<setting id="sonarr.days" type="slider" label="Days Ahead" default="7" range="1,30"/>
+	</category>
 </settings>

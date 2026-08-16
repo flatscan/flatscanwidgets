@@ -81,30 +81,33 @@ class TVShowWidgets(BaseWidget):
             if ep.get('dateadded', '')[:10] >= cutoff
         ]
         
-        # Group episodes into time clusters (within 24h of cluster start)
+        # Group episodes into time clusters (within 20h of the most recent in cluster)
         clusters = []
         current_cluster = []
-        cluster_start_time = None
+        cluster_end_time = None  # Track the most recent episode in cluster
         
-        for ep in recent_eps:
+        # Sort by dateadded descending (most recent first)
+        for ep in sorted(recent_eps, key=lambda x: x.get('dateadded', ''), reverse=True):
             ep_time = datetime.fromisoformat(ep.get('dateadded', '').replace('Z', '+00:00'))
             
-            if cluster_start_time is None:
-                # Start new cluster
-                cluster_start_time = ep_time
+            if cluster_end_time is None:
+                # Start new cluster with most recent episode
+                cluster_end_time = ep_time
                 current_cluster = [ep]
-            elif (cluster_start_time - ep_time).total_seconds() <= 86400:  # 24h
-                # Within 24h of cluster start, add to current cluster
+            elif (cluster_end_time - ep_time).total_seconds() <= 72000:  # 20 hours = 72000 seconds
+                # Within 20h of the most recent in cluster, add to current cluster
                 current_cluster.append(ep)
+                # cluster_end_time stays the same (most recent)
             else:
-                # More than 24h from cluster start, save and start new cluster
+                # More than 20h from cluster end, save and start new cluster
                 clusters.append(current_cluster)
-                cluster_start_time = ep_time
+                cluster_end_time = ep_time
                 current_cluster = [ep]
         
         # Don't forget the last cluster
         if current_cluster:
             clusters.append(current_cluster)
+            
         
         # Now process each cluster with the season/show grouping logic
         items = []
@@ -671,6 +674,100 @@ class TVShowWidgets(BaseWidget):
         return genres
     
     # ========== SMART/SUGGESTION WIDGETS ==========
+
+    def get_sonarr_upcoming(self, days=None):
+        """
+        Get upcoming episodes from Sonarr.
+        """
+        import urllib.request
+        import urllib.parse
+        import json
+        from datetime import datetime, timedelta
+        
+        if not get_setting('sonarr.enabled', 'false') == 'true':
+            log('Sonarr not enabled')
+            return []
+        
+        sonarr_url = get_setting('sonarr.url', '').rstrip('/')
+        api_key = get_setting('sonarr.apikey', '')
+        
+        if not sonarr_url or not api_key:
+            log('Sonarr not configured')
+            return []
+        
+        if days is None:
+            days = int(get_setting('sonarr.days', '7'))
+        
+        start = datetime.now().strftime('%Y-%m-%d')
+        end = (datetime.now() + timedelta(days=days)).strftime('%Y-%m-%d')
+        
+        # Build URL with parameters
+        params = urllib.parse.urlencode({'start': start, 'end': end, 'includeSeries': 'true'})
+        url = f'{sonarr_url}/api/v3/calendar?{params}'
+        
+        headers = {'X-Api-Key': api_key}
+        
+        try:
+            log(f'Fetching Sonarr calendar: {start} to {end}', 'INFO')
+            
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as response:
+                episodes = json.loads(response.read().decode('utf-8'))
+
+     
+            items = []
+            for ep in episodes:
+                log(f'Full episode keys: {ep.keys()}', 'INFO')
+                log(f'Series value: {ep.get("series")}', 'INFO')
+                log(f'Episode title: {ep.get("title")}', 'INFO')
+                if ep.get('hasFile', False):
+                    continue
+                
+                series = ep.get('series', {})
+
+                log(f'Series: {series.get("title")}, has images: {"images" in series}', 'INFO')
+                if 'images' in series:
+                    log(f'Images: {series["images"]}', 'INFO')
+                else:
+                    log(f'No images key in series', 'INFO')
+                # Find poster image specifically
+                poster_url = ''
+                images = series.get('images', [])
+                for img in images:
+                    if img.get('coverType') == 'poster':
+                        poster_url = img.get('remoteUrl', '')
+                        break
+                
+                # If remoteUrl is relative, prepend Sonarr URL
+                if poster_url and poster_url.startswith('/'):
+                    poster_url = f"{sonarr_url}{poster_url}"
+
+                if series.get('images'):
+                    log(f"Images for {series.get('title')}: {series['images']}", 'INFO')
+                           
+                
+                item = {
+                    'title': ep.get('title', ''),
+                    'showtitle': series.get('title', ''),
+                    'season': ep.get('seasonNumber', 0),
+                    'episode': ep.get('episodeNumber', 0),
+                    'firstaired': ep.get('airDate', ''),
+                    'mediatype': 'episode',
+                    'plot': ep.get('overview', ''),
+                    'tvshowid': series.get('tvdbId', 0),
+                    'art': {
+                        'poster': poster_url,
+                        'fanart': '',  # Could add fanart lookup similarly
+                    }
+                }
+                items.append(item)
+            
+            log(f'Found {len(items)} upcoming episodes from Sonarr', 'INFO')
+            return items
+            
+        except Exception as e:
+            log(f'Sonarr API error: {e}', 'ERROR')
+            return []
     
     def get_suggestions(self, limit=20):
         """
