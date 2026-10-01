@@ -47,6 +47,7 @@ class TVShowWidgets(BaseWidget):
         """Initialize with season artwork cache."""
         super().__init__(handle)
         self._season_art_cache = {}
+        self._show_art_cache = {}
     
     # ========== EPISODE WIDGETS ==========
 
@@ -134,7 +135,7 @@ class TVShowWidgets(BaseWidget):
                         # Single episode - return as-is
                         ep = season_eps[0]
                         ep['mediatype'] = 'episode'
-                        season_art = self._get_season_art(show_id, season_num)
+                        season_art = self._get_combined_art(show_id, season_num)
                         ep['art'] = {
                             'thumb': ep.get('thumbnail', ''),
                             'poster': season_art.get('poster', ''),
@@ -163,7 +164,7 @@ class TVShowWidgets(BaseWidget):
     def _create_season_group(self, show_id, season_id, season_num, episodes):
         """Create a season-level group item."""
         season_info = self._get_season_details(season_id)
-        season_art = self._get_season_art(show_id, season_num)
+        season_art = self._get_combined_art(show_id, season_num)
         
         # Sort episodes by episode number
         sorted_eps = sorted(episodes, key=lambda x: x.get('episode', 0))
@@ -218,6 +219,8 @@ class TVShowWidgets(BaseWidget):
         ])
         
         show_info = self._get_show_details(show_id)
+
+        show_art = self._get_show_art(show_id)
         
         # Find first episode
         all_eps = []
@@ -246,7 +249,11 @@ class TVShowWidgets(BaseWidget):
             'group_type': 'show',
             'season_count': len(season_groups),
             'episode_count': len(episodes),
-            'art': show_info.get('art', {})
+            'art': {
+                            'poster': show_art.get('poster', ''),
+                            'fanart': show_art.get('fanart', ''),
+                            'banner': show_art.get('banner', ''),
+                        }
         }
 
     def _set_navigation(self, item, navigate_to):
@@ -440,7 +447,7 @@ class TVShowWidgets(BaseWidget):
         """
         Get next episodes to watch with season posters.
         """
-        log('=== Next Up: Starting ===')
+        log('=== Next Up: Starting ===', 'INFO')
         
         try:
             # Get shows with watched episodes
@@ -479,7 +486,11 @@ class TVShowWidgets(BaseWidget):
                     
                     # Get season artwork for this episode's season
                     season_num = ep.get('season', 1)
-                    season_art = self._get_season_art(show_id, season_num)
+                    season_art = self._get_combined_art(show_id, season_num)
+                    show_art = self._get_show_art(show_id)
+                    fanart = show_art.get('fanart', '')
+
+                    log(f'=== fanart: {fanart} ', 'INFO')
                     
                     # Build art dict with season poster as priority
                     ep['art'] = {
@@ -487,8 +498,8 @@ class TVShowWidgets(BaseWidget):
                         'poster': season_art.get('poster', ''),  # Season poster (main)
                         'season.poster': season_art.get('poster', ''),
                         'tvshow.poster': show.get('art', {}).get('poster', ''),  # Fallback
-                        'fanart': season_art.get('fanart', '') or show.get('art', {}).get('fanart', ''),
-                        'tvshow.fanart': show.get('art', {}).get('fanart', ''),
+                        'fanart': show_art.get('fanart', ''),
+                        'tvshow.fanart': show_art.get('fanart', ''),
                         'banner': season_art.get('banner', '') or show.get('art', {}).get('banner', ''),
                         'clearlogo': show.get('art', {}).get('clearlogo', ''),
                     }
@@ -498,21 +509,21 @@ class TVShowWidgets(BaseWidget):
                     if len(next_up) >= limit:
                         break
             
-            log(f'=== Next Up: Returning {len(next_up)} episodes ===')
+            log(f'=== Next Up: Returning {len(next_up)} episodes ===', 'INFO')
             return next_up
             
         except Exception as e:
-            log(f'Next Up failed: {e}', 'ERROR')
+            log(f'Next Up failed: {e}', 'ERROR', 'INFO')
             return []
 
-    def _get_season_art(self, tvshowid, season_num):
+    def _get_season_art(self, show_id, season_num):
         """Get season artwork with simple per-season caching."""
-        cache_key = (tvshowid, season_num)
+        cache_key = (show_id, season_num)
         
         if cache_key not in self._season_art_cache:
             try:
                 result = json_rpc_call('VideoLibrary.GetSeasons', {
-                    'tvshowid': int(tvshowid),
+                    'tvshowid': int(show_id),
                     'properties': ['art', 'season'],
                 })
                 
@@ -520,14 +531,72 @@ class TVShowWidgets(BaseWidget):
                 
                 # Cache all seasons from this show
                 for season in seasons:
-                    key = (tvshowid, season.get('season'))
-                    self._season_art_cache[key] = season.get('art', {})
+                    key = (show_id, season.get('season'))
+                    art = season.get('art', {})
+                    
+                    # Decode image:// URLs to direct HTTP URLs
+                    for art_key in ['poster', 'fanart', 'banner', 'thumb']:
+                        url = art.get(art_key, '')
+                        if url.startswith('image://'):
+                            import urllib.parse
+                            decoded = url[8:]  # Remove 'image://'
+                            decoded = urllib.parse.unquote(decoded)
+                            # Remove trailing slash if present
+                            if decoded.endswith('/'):
+                                decoded = decoded[:-1]
+                            art[art_key] = decoded
+                    
+                    self._season_art_cache[key] = art
                     
             except Exception as e:
                 log(f'Failed to get season art: {e}')
                 return {}
         
         return self._season_art_cache.get(cache_key, {})
+
+    def _get_show_art(self, show_id):
+        """Get TV show-level artwork."""
+        if show_id not in self._show_art_cache:
+            try:
+                result = json_rpc_call('VideoLibrary.GetTVShowDetails', {
+                    'tvshowid': int(show_id),
+                    'properties': ['art'],
+                })
+                art = result.get('result', {}).get('tvshowdetails', {}).get('art', {})
+                
+                # Decode image:// URLs to direct HTTP URLs
+                for key in ['fanart', 'poster', 'banner', 'clearlogo']:
+                    url = art.get(key, '')
+                    if url.startswith('image://'):
+                        # Decode the URL
+                        import urllib.parse
+                        decoded = url[8:]  # Remove 'image://'
+                        decoded = urllib.parse.unquote(decoded)
+                        # Remove trailing slash if present
+                        if decoded.endswith('/'):
+                            decoded = decoded[:-1]
+                        art[key] = decoded
+                        log(f'Decoded {key}: {decoded[:80]}...')
+                
+                self._show_art_cache[show_id] = art
+            except Exception as e:
+                log(f'Failed to get show art: {e}')
+                return {}
+        
+        return self._show_art_cache.get(show_id, {})
+
+    def _get_combined_art(self, show_id, season_num):
+        """Get combined season and show artwork."""
+        season_art = self._get_season_art(show_id, season_num)  # Your existing logic
+        show_art = self._get_show_art(show_id)
+        
+        # Merge - season poster takes priority, show provides fanart
+        combined = {}
+        combined.update(show_art)  # Show art first (fanart, banner, etc.)
+        combined.update(season_art)  # Season art overrides (poster)
+
+            
+        return combined
         
     def get_recent_episodes(self, limit=20):
         """Get recently added episodes with season posters."""

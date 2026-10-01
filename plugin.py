@@ -116,6 +116,14 @@ def create_listitem(item_data, content_type):
         infotag.setPlaycount(int(item_data.get('watchedepisodes', 0)))
         infotag.setYear(int(item_data.get('year', 0)) if item_data.get('year') else 0)
         infotag.setFirstAired(item_data.get('dateadded', ''))
+        # Set art
+        li.setArt({
+            'fanart': item_data.get('art', {}).get('fanart', ''),
+            'poster': item_data.get('art', {}).get('poster', ''),
+            'banner': item_data.get('art', {}).get('banner', ''),
+            'clearlogo': item_data.get('art', {}).get('clearlogo', ''),
+        })
+        
         li.setIsFolder(True)
         
     elif content_type == 'episode':
@@ -130,6 +138,13 @@ def create_listitem(item_data, content_type):
             infotag.setEpisode(int(item_data.get('episode', 0)))
             infotag.setFirstAired(item_data.get('firstaired', ''))
             infotag.setMediaType('episode')
+            li.setArt({
+                'fanart': item_data.get('art', {}).get('fanart', ''),
+                'poster': item_data.get('art', {}).get('poster', ''),
+                'banner': item_data.get('art', {}).get('banner', ''),
+                'clearlogo': item_data.get('art', {}).get('clearlogo', ''),
+                'thumb': item_data.get('art', {}).get('poster', ''),  # Use poster as thumb
+            })
             # Not playable - no file yet
             li.setProperty('IsPlayable', 'false')
         else:
@@ -143,6 +158,13 @@ def create_listitem(item_data, content_type):
             infotag.setRating(float(item_data.get('rating', 0)))
             infotag.setFirstAired(item_data.get('firstaired', ''))
             infotag.setDuration(int(item_data.get('runtime', 0)))
+            li.setArt({
+                'fanart': item_data.get('art', {}).get('fanart', ''),
+                'poster': item_data.get('art', {}).get('poster', ''),
+                'banner': item_data.get('art', {}).get('banner', ''),
+                'clearlogo': item_data.get('art', {}).get('clearlogo', ''),
+                'thumb': item_data.get('art', {}).get('poster', ''),  # Use poster as thumb
+            })
             li.setProperty('IsPlayable', 'true')
         
     elif content_type == 'movie':
@@ -163,7 +185,13 @@ def create_listitem(item_data, content_type):
         infotag.setSeason(int(item_data.get('season', 0)))
         infotag.setFirstAired(item_data.get('dateadded', ''))
         infotag.setMediaType('season')
-        
+        li.setArt({
+            'fanart': item_data.get('art', {}).get('fanart', ''),
+            'poster': item_data.get('art', {}).get('poster', ''),
+            'banner': item_data.get('art', {}).get('banner', ''),
+            'clearlogo': item_data.get('art', {}).get('clearlogo', ''),
+            'thumb': item_data.get('art', {}).get('poster', ''),  # Use poster as thumb
+        })
         # Respect the playable flag from _set_navigation
         if item_data.get('is_playable'):
             li.setProperty('IsPlayable', 'true')
