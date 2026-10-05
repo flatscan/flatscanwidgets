@@ -9,7 +9,7 @@ import random
 from .base import BaseWidget
 from .movies import MovieWidgets
 from .tvshows import TVShowWidgets
-from resources.lib.kodi_utils import json_rpc_call, set_window_property
+from resources.lib.kodi_utils import json_rpc_call
 from resources.lib.logger import log
 
 class MixedWidgets(BaseWidget):

@@ -7,7 +7,7 @@ Base widget class - provides common functionality for all widgets.
 
 import xbmcplugin
 import sys
-from resources.lib.kodi_utils import json_rpc_call, set_window_property
+from resources.lib.kodi_utils import json_rpc_call
 from resources.lib.logger import log
 
 class BaseWidget:

@@ -5,7 +5,6 @@
 TV show widgets - All TV-related content.
 """
 
-from logging import INFO
 import random
 from .base import BaseWidget
 from resources.lib.kodi_utils import json_rpc_call
