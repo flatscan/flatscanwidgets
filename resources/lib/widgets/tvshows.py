@@ -716,7 +716,7 @@ class TVShowWidgets(BaseWidget):
     
     # ========== SMART/SUGGESTION WIDGETS ==========
 
-    def get_sonarr_upcoming(self, days=None):
+    def get_sonarr_upcoming(self, days=None, limit=100):
         """
         Get upcoming episodes from Sonarr.
         """
@@ -758,35 +758,22 @@ class TVShowWidgets(BaseWidget):
      
             items = []
             for ep in episodes:
-                log(f'Full episode keys: {ep.keys()}', 'INFO')
-                log(f'Series value: {ep.get("series")}', 'INFO')
-                log(f'Episode title: {ep.get("title")}', 'INFO')
                 if ep.get('hasFile', False):
                     continue
-                
+
                 series = ep.get('series', {})
 
-                log(f'Series: {series.get("title")}, has images: {"images" in series}', 'INFO')
-                if 'images' in series:
-                    log(f'Images: {series["images"]}', 'INFO')
-                else:
-                    log(f'No images key in series', 'INFO')
-                # Find poster image specifically
-                poster_url = ''
-                images = series.get('images', [])
-                for img in images:
-                    if img.get('coverType') == 'poster':
-                        poster_url = img.get('remoteUrl', '')
-                        break
-                
-                # If remoteUrl is relative, prepend Sonarr URL
-                if poster_url and poster_url.startswith('/'):
-                    poster_url = f"{sonarr_url}{poster_url}"
+                # Pick poster and fanart from the series images
+                art = {'poster': '', 'fanart': ''}
+                for img in series.get('images', []):
+                    cover_type = img.get('coverType')
+                    if cover_type in art and not art[cover_type]:
+                        image_url = img.get('remoteUrl', '')
+                        # If remoteUrl is relative, prepend Sonarr URL
+                        if image_url.startswith('/'):
+                            image_url = f"{sonarr_url}{image_url}"
+                        art[cover_type] = image_url
 
-                if series.get('images'):
-                    log(f"Images for {series.get('title')}: {series['images']}", 'INFO')
-                           
-                
                 item = {
                     'title': ep.get('title', ''),
                     'showtitle': series.get('title', ''),
@@ -796,16 +783,16 @@ class TVShowWidgets(BaseWidget):
                     'mediatype': 'episode',
                     'plot': ep.get('overview', ''),
                     'tvshowid': series.get('tvdbId', 0),
-                    'art': {
-                        'poster': poster_url,
-                        'fanart': '',  # Could add fanart lookup similarly
-                    }
+                    'art': art,
                 }
                 items.append(item)
-            
+
+                if len(items) >= limit:
+                    break
+
             log(f'Found {len(items)} upcoming episodes from Sonarr', 'INFO')
             return items
-            
+
         except Exception as e:
             log(f'Sonarr API error: {e}', 'ERROR')
             return []

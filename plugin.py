@@ -502,7 +502,7 @@ def router():
                 xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
             else:
                 days = int(params.get('days', get_setting('sonarr.days', '7')))
-                items = shows.get_sonarr_upcoming(days=days)
+                items = shows.get_sonarr_upcoming(days=days, limit=limit)
                 add_items_to_directory(items, 'episode', 'Upcoming Episodes')
                     
         # MIXED MEDIA ROUTES
