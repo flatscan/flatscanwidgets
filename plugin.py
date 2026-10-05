@@ -278,327 +278,309 @@ def add_items_to_directory(items, content_type, category=''):
     
     xbmcplugin.endOfDirectory(HANDLE)
 
+# ========== ROUTE REGISTRY ==========
+#
+# Every plugin route is registered once with @route. A handler takes
+# (widgets, params, limit) and returns (items, mediatype, label) to display,
+# or None to fail the directory (missing params, feature disabled, ...).
+#
+# Routes given a category and label also appear in that category's listing
+# menu, in the order they are defined here. To add a widget, add a method on
+# a widget class and register a handler below.
+
+CATEGORIES = [
+    # (category id, title, icon)
+    ('tvshows', 'TV Shows', 'DefaultTVShows.png'),
+    ('movies', 'Movies', 'DefaultMovies.png'),
+    ('mixed', 'Mixed', 'DefaultVideo.png'),
+]
+
+ROUTES = {}
+
+
+class Widgets:
+    """Widget providers handed to route handlers."""
+
+    def __init__(self):
+        self.movies = MovieWidgets()
+        self.shows = TVShowWidgets()
+        self.mixed = MixedWidgets()
+
+
+def route(info, category=None, label=None):
+    """Register a handler for ?info=<info>, optionally listed in a category menu."""
+    def register(handler):
+        ROUTES[info] = {'handler': handler, 'category': category, 'label': label}
+        return handler
+    return register
+
+
+# ----- TV show widgets -----
+
+@route('inprogressepisodes', 'tvshows', 'In Progress Episodes')
+def route_inprogressepisodes(w, params, limit):
+    return w.shows.get_inprogress_episodes(limit=limit), 'episode', 'In Progress Episodes'
+
+
+@route('nextup', 'tvshows', 'Next Up')
+def route_nextup(w, params, limit):
+    return w.shows.get_next_up(limit=limit), 'episode', 'Next Up'
+
+
+@route('recentepisodes', 'tvshows', 'Recent Episodes')
+def route_recentepisodes(w, params, limit):
+    return w.shows.get_recent_episodes(limit=limit), 'episode', 'Recent Episodes'
+
+
+@route('recentlyaired', 'tvshows', 'Recently Aired Episodes')
+def route_recentlyaired(w, params, limit):
+    days = int(params.get('days', 90))  # Allow custom days via parameter
+    return w.shows.get_recently_aired(days=days, limit=limit), 'episode', 'Recently Aired'
+
+
+@route('recenttvshows', 'tvshows', 'Recently Updated Shows')
+def route_recenttvshows(w, params, limit):
+    return w.shows.get_recently_updated(limit=limit), 'tvshow', 'Recently Updated Shows'
+
+
+@route('recentlyaddedgrouped', 'tvshows', 'Recently Added Grouped')
+def route_recentlyaddedgrouped(w, params, limit):
+    days = int(params.get('days', 30))
+    # navigate_to comes from settings, not URL
+    return w.shows.get_recently_added_grouped(days=days, limit=limit), 'mixed', 'Recently Added'
+
+
+@route('upcomingepisodes', 'tvshows', 'Upcoming Episodes')
+def route_upcomingepisodes(w, params, limit):
+    if not get_setting('sonarr.enabled', 'false') == 'true':
+        log('Sonarr not enabled, cannot show upcoming episodes')
+        return None
+    days = int(params.get('days', get_setting('sonarr.days', '7')))
+    return w.shows.get_sonarr_upcoming(days=days, limit=limit), 'episode', 'Upcoming Episodes'
+
+
+@route('tvshowgenres', 'tvshows', 'TV Show Genres')
+def route_tvshowgenres(w, params, limit):
+    return w.shows.get_genres(), 'genre', 'TV Show Genres'
+
+
+@route('tvshowsbyrandomgenre', 'tvshows', 'Random Genre')
+def route_tvshowsbyrandomgenre(w, params, limit):
+    return w.shows.get_by_random_genre(limit=limit), 'tvshow', 'TV Shows by Genre'
+
+
+@route('tvsuggestions', 'tvshows', 'Suggestions')
+def route_tvsuggestions(w, params, limit):
+    return w.shows.get_suggestions(limit=limit), 'tvshow', 'Suggested TV Shows'
+
+
+@route('tvsimilar')
+def route_tvsimilar(w, params, limit):
+    dbid = params.get('dbid')
+    if not dbid:
+        return None
+    return w.shows.get_similar(dbid, limit=limit), 'tvshow', 'Similar TV Shows'
+
+
+@route('seasons')
+def route_seasons(w, params, limit):
+    dbid = params.get('dbid')
+    if not dbid:
+        return None
+    return w.shows.get_seasons(dbid, limit=limit), 'season', 'Seasons'
+
+
+@route('episodes')
+def route_episodes(w, params, limit):
+    dbid = params.get('dbid')
+    season = params.get('season')
+    if not (dbid and season):
+        return None
+    return w.shows.get_episodes_of_season(dbid, season, limit=limit), 'episode', 'Episodes'
+
+
+# ----- Movie widgets -----
+
+@route('inprogressmovies', 'movies', 'In Progress Movies')
+def route_inprogressmovies(w, params, limit):
+    return w.movies.get_inprogress(limit=limit), 'movie', 'In Progress Movies'
+
+
+@route('recentmovies', 'movies', 'Recent Movies')
+def route_recentmovies(w, params, limit):
+    unwatched = params.get('unwatched', 'false').lower() == 'true'
+    items = w.movies.get_recent(limit=limit, unwatched_only=unwatched)
+    return items, 'movie', 'Recent Unwatched Movies' if unwatched else 'Recent Movies'
+
+
+@route('randommovies', 'movies', 'Random Movies')
+def route_randommovies(w, params, limit):
+    return w.movies.get_random(limit=limit), 'movie', 'Random Movies'
+
+
+# ----- Mixed media widgets -----
+
+@route('inprogressmedia', 'mixed', 'Continue Watching')
+def route_inprogressmedia(w, params, limit):
+    return w.mixed.get_inprogress_media(limit=limit), 'video', 'Continue Watching'
+
+
+@route('suggestions', 'mixed', 'Suggestions')
+def route_suggestions(w, params, limit):
+    return w.mixed.get_suggestions_based_on_watched(limit=limit), 'video', 'Suggestions'
+
+
+@route('byrandomgenre')
+def route_byrandomgenre(w, params, limit):
+    result = w.mixed.get_by_random_genre(limit=limit)
+    genre = result.get('genre', 'Random')
+    return result.get('items', []), 'video', f'{genre} Movies & Shows'
+
+
+@route('similarmovies')
+def route_similarmovies(w, params, limit):
+    dbid = params.get('dbid')
+    if not dbid:
+        log('similarmovies: No dbid provided')
+        return None
+    return w.mixed.get_similar_to_current(dbid, 'movie', limit=limit), 'movie', 'Similar Movies'
+
+
+@route('similartvshows')
+def route_similartvshows(w, params, limit):
+    dbid = params.get('dbid')
+    if not dbid:
+        log('similartvshows: No dbid provided')
+        return None
+    return w.mixed.get_similar_to_current(dbid, 'tvshow', limit=limit), 'tvshow', 'Similar TV Shows'
+
+
+@route('morebyactor')
+def route_morebyactor(w, params, limit):
+    actor = params.get('actor')
+    if not actor:
+        log('morebyactor: No actor provided')
+        return None
+    return w.mixed.get_more_by_actor(actor, limit=limit), 'movie', f'Movies with {actor}'
+
+
+# ----- Info-based widgets (using the info module) -----
+
+@route('seasonshowdetails')
+def route_seasonshowdetails(w, params, limit):
+    # Returns TV show details as a single "dummy" item for display at season level
+    dbid = params.get('dbid')
+    if not dbid:
+        log('seasonshowdetails: No dbid provided')
+        return None
+    show_info = TVShowDetails().get_info(dbid, 'season')
+    if not show_info:
+        return None
+    # Skins can use this to display show stats at season level
+    dummy_item = {
+        'title': show_info.get('title', ''),
+        'plot': f"{show_info.get('episodes', 0)} episodes | {show_info.get('watchedepisodes', 0)} watched",
+        'art': show_info.get('art', {}),
+        'mediatype': 'tvshow'
+    }
+    return [dummy_item], 'tvshow', show_info.get('title', '')
+
+
+@route('pathstatswidget')
+def route_pathstatswidget(w, params, limit):
+    # Returns path statistics as a displayable item
+    path = params.get('path', '')
+    if not path:
+        return None
+    stats = PathStats().get_stats(path)
+    stat_items = [
+        {
+            'title': f"Total: {stats.get('count', 0)}",
+            'plot': f"Watched: {stats.get('watched', 0)} | Unwatched: {stats.get('unwatched', 0)}",
+            'mediatype': 'video'
+        }
+    ]
+    return stat_items, 'video', 'Statistics'
+
+
+# ========== LISTING MENUS ==========
+
 def show_root_listing():
-    """Show root menu with proper category grouping."""
+    """Show root menu with the widget categories."""
     if HANDLE < 0:
         return
-        
+
     xbmcplugin.setPluginCategory(HANDLE, 'Flatscan Widgets')
     xbmcplugin.setContent(HANDLE, 'video')
-    
-    # TV Shows Category (as a folder)
-    li = xbmcgui.ListItem(label='[B]TV Shows[/B]')
-    li.setArt({'icon': 'DefaultTVShows.png'})
-    li.setInfo('video', {'title': 'TV Shows'})
-    url = 'plugin://script.flatscan.widgets/?info=category&category=tvshows'
-    xbmcplugin.addDirectoryItem(HANDLE, url, li, isFolder=True)
-    
-    # Movies Category (as a folder)
-    li = xbmcgui.ListItem(label='[B]Movies[/B]')
-    li.setArt({'icon': 'DefaultMovies.png'})
-    li.setInfo('video', {'title': 'Movies'})
-    url = 'plugin://script.flatscan.widgets/?info=category&category=movies'
-    xbmcplugin.addDirectoryItem(HANDLE, url, li, isFolder=True)
-    
-    # Mixed Category (as a folder)
-    li = xbmcgui.ListItem(label='[B]Mixed[/B]')
-    li.setArt({'icon': 'DefaultVideo.png'})
-    li.setInfo('video', {'title': 'Mixed'})
-    url = 'plugin://script.flatscan.widgets/?info=category&category=mixed'
-    xbmcplugin.addDirectoryItem(HANDLE, url, li, isFolder=True)
-    
+
+    for category, title, icon in CATEGORIES:
+        li = xbmcgui.ListItem(label=f'[B]{title}[/B]')
+        li.setArt({'icon': icon})
+        li.setInfo('video', {'title': title})
+        url = f'plugin://script.flatscan.widgets/?info=category&category={category}'
+        xbmcplugin.addDirectoryItem(HANDLE, url, li, isFolder=True)
+
     xbmcplugin.endOfDirectory(HANDLE)
 
-def show_tvshows_listing():
-    """Show all TV Shows widgets."""
+
+def show_category_listing(category):
+    """Show every registered widget belonging to a category."""
     if HANDLE < 0:
         return
-        
-    xbmcplugin.setPluginCategory(HANDLE, 'TV Shows')
-    xbmcplugin.setContent(HANDLE, 'video')
-    
-    tv_widgets = [
-    ('In Progress Episodes', 'inprogressepisodes'),
-    ('Next Up', 'nextup'),
-    ('Recent Episodes', 'recentepisodes'),
-    ('Recently Aired Episodes', 'recentlyaired'),
-    ('Recently Updated Shows', 'recenttvshows'),
-    ('Recently Added Grouped', 'recentlyaddedgrouped'),
-    ('Upcoming Episodes', 'upcomingepisodes'),
-    ('TV Show Genres', 'tvshowgenres'),
-    ('Random Genre', 'tvshowsbyrandomgenre'),
-    ('Suggestions', 'tvsuggestions'),
-    ]
-    
-    for label, info_id in tv_widgets:
-        li = xbmcgui.ListItem(label=label)
-        url = f'plugin://script.flatscan.widgets/?info={info_id}'
-        xbmcplugin.addDirectoryItem(HANDLE, url, li, isFolder=True)
-    
-    xbmcplugin.endOfDirectory(HANDLE)
 
-
-def show_movies_listing():
-    """Show all Movies widgets."""
-    if HANDLE < 0:
+    titles = {cat: title for cat, title, _ in CATEGORIES}
+    if category not in titles:
         return
-        
-    xbmcplugin.setPluginCategory(HANDLE, 'Movies')
+
+    xbmcplugin.setPluginCategory(HANDLE, titles[category])
     xbmcplugin.setContent(HANDLE, 'video')
-    
-    movie_widgets = [
-        ('In Progress Movies', 'inprogressmovies'),
-        ('Recent Movies', 'recentmovies'),
-        ('Random Movies', 'randommovies'),
-    ]
-    
-    for label, info_id in movie_widgets:
-        li = xbmcgui.ListItem(label=label)
+
+    for info_id, entry in ROUTES.items():
+        if entry['category'] != category:
+            continue
+        li = xbmcgui.ListItem(label=entry['label'])
         url = f'plugin://script.flatscan.widgets/?info={info_id}'
         xbmcplugin.addDirectoryItem(HANDLE, url, li, isFolder=True)
-    
+
     xbmcplugin.endOfDirectory(HANDLE)
 
 
-def show_mixed_listing():
-    """Show all Mixed widgets."""
-    if HANDLE < 0:
-        return
-        
-    xbmcplugin.setPluginCategory(HANDLE, 'Mixed')
-    xbmcplugin.setContent(HANDLE, 'video')
-    
-    mixed_widgets = [
-        ('Continue Watching', 'inprogressmedia'),
-        ('Suggestions', 'suggestions'),
-    ]
-    
-    for label, info_id in mixed_widgets:
-        li = xbmcgui.ListItem(label=label)
-        url = f'plugin://script.flatscan.widgets/?info={info_id}'
-        xbmcplugin.addDirectoryItem(HANDLE, url, li, isFolder=True)
-    
-    xbmcplugin.endOfDirectory(HANDLE)
+# ========== ROUTER ==========
 
 def router():
-    log('=== ROUTER CALLED ===')   # <-- Add this line
     """Route plugin requests to appropriate handlers."""
+    log('=== ROUTER CALLED ===')
     params = get_params()
     info = params.get('info', '')
 
     # Handle category folders
     if info == 'category':
-        category = params.get('category', '')
-        if category == 'tvshows':
-            show_tvshows_listing()
-        elif category == 'movies':
-            show_movies_listing()
-        elif category == 'mixed':
-            show_mixed_listing()
+        show_category_listing(params.get('category', ''))
         return
-    
+
     log(f'Plugin called with info={info}, params={params}')
-    
+
     # Handle root browsing (no info parameter)
     if not info:
         show_root_listing()
         return
-    
+
+    entry = ROUTES.get(info)
+    if entry is None:
+        log(f'Unknown info type: {info}')
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+        return
+
     # Get limit parameter (default 100)
     limit = int(params.get('limit', 100))
-    
-    # Initialize widget classes
-    movies = MovieWidgets()
-    shows = TVShowWidgets()
-    mixed = MixedWidgets()
-    
-  
-    
-    # Route to appropriate handler
+
     try:
-        # WIDGET ROUTES
-        
-        if info == 'inprogressmovies':
-            items = movies.get_inprogress(limit=limit)
-            add_items_to_directory(items, 'movie', 'In Progress Movies')
-            
-        elif info == 'recentmovies':
-            unwatched = params.get('unwatched', 'false').lower() == 'true'
-            items = movies.get_recent(limit=limit, unwatched_only=unwatched)
-            label = 'Recent Unwatched Movies' if unwatched else 'Recent Movies'
-            add_items_to_directory(items, 'movie', label)
-            
-        elif info == 'randommovies':
-            items = movies.get_random(limit=limit)
-            add_items_to_directory(items, 'movie', 'Random Movies')
-            
-        elif info == 'inprogressepisodes':
-            items = shows.get_inprogress_episodes(limit=limit)
-            add_items_to_directory(items, 'episode', 'In Progress Episodes')
-            
-        elif info == 'nextup':
-            items = shows.get_next_up(limit=limit)
-            add_items_to_directory(items, 'episode', 'Next Up')
-            
-        elif info == 'recentepisodes':
-            items = shows.get_recent_episodes(limit=limit)
-            add_items_to_directory(items, 'episode', 'Recent Episodes')
-            
-        elif info == 'recenttvshows':
-            items = shows.get_recently_updated(limit=limit)
-            add_items_to_directory(items, 'tvshow', 'Recently Updated Shows')
-
-        elif info == 'tvshowgenres':
-            items = shows.get_genres()
-            add_items_to_directory(items, 'genre', 'TV Show Genres')
-            
-        elif info == 'tvshowsbyrandomgenre':
-            items = shows.get_by_random_genre(limit=limit)
-            add_items_to_directory(items, 'tvshow', 'TV Shows by Genre')
-            
-        elif info == 'tvsuggestions':
-            items = shows.get_suggestions(limit=limit)
-            add_items_to_directory(items, 'tvshow', 'Suggested TV Shows')
-
-        elif info == 'recentlyaired':
-            days = int(params.get('days', 90))  # Allow custom days via parameter
-            items = shows.get_recently_aired(days=days, limit=limit)
-            add_items_to_directory(items, 'episode', 'Recently Aired')
-            
-        elif info == 'tvsimilar':
-            dbid = params.get('dbid')
-            if dbid:
-                items = shows.get_similar(dbid, limit=limit)
-                add_items_to_directory(items, 'tvshow', 'Similar TV Shows')
-            else:
-                xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-                
-        elif info == 'seasons':
-            dbid = params.get('dbid')
-            if dbid:
-                items = shows.get_seasons(dbid, limit=limit)
-                add_items_to_directory(items, 'season', 'Seasons')
-            else:
-                xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-                
-        elif info == 'episodes':
-            dbid = params.get('dbid')
-            season = params.get('season')
-            if dbid and season:
-                items = shows.get_episodes_of_season(dbid, season, limit=limit)
-                add_items_to_directory(items, 'episode', 'Episodes')
-            else:
-                xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-
-        elif info == 'recentlyaddedgrouped':
-            days = int(params.get('days', 30))
-            # navigate_to now comes from settings, not URL
-            items = shows.get_recently_added_grouped(days=days, limit=limit)
-            add_items_to_directory(items, 'mixed', 'Recently Added')
-
-        elif info == 'upcomingepisodes':
-            if not get_setting('sonarr.enabled', 'false') == 'true':
-                log('Sonarr not enabled, cannot show upcoming episodes')
-                xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-            else:
-                days = int(params.get('days', get_setting('sonarr.days', '7')))
-                items = shows.get_sonarr_upcoming(days=days, limit=limit)
-                add_items_to_directory(items, 'episode', 'Upcoming Episodes')
-                    
-        # MIXED MEDIA ROUTES
-        
-        elif info == 'inprogressmedia':
-            items = mixed.get_inprogress_media(limit=limit)
-            add_items_to_directory(items, 'video', 'Continue Watching')
-            
-        elif info == 'suggestions':
-            items = mixed.get_suggestions_based_on_watched(limit=limit)
-            add_items_to_directory(items, 'video', 'Suggestions')
-            
-        elif info == 'byrandomgenre':
-            result = mixed.get_by_random_genre(limit=limit)
-            items = result.get('items', [])
-            genre = result.get('genre', 'Random')
-            add_items_to_directory(items, 'video', f'{genre} Movies & Shows')
-            
-        elif info == 'similarmovies':
-            dbid = params.get('dbid')
-            if dbid:
-                items = mixed.get_similar_to_current(dbid, 'movie', limit=limit)
-                add_items_to_directory(items, 'movie', 'Similar Movies')
-            else:
-                log('similarmovies: No dbid provided')
-                xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-                
-        elif info == 'similartvshows':
-            dbid = params.get('dbid')
-            if dbid:
-                items = mixed.get_similar_to_current(dbid, 'tvshow', limit=limit)
-                add_items_to_directory(items, 'tvshow', 'Similar TV Shows')
-            else:
-                log('similartvshows: No dbid provided')
-                xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-                
-        elif info == 'morebyactor':
-            actor = params.get('actor')
-            if actor:
-                items = mixed.get_more_by_actor(actor, limit=limit)
-                add_items_to_directory(items, 'movie', f'Movies with {actor}')
-            else:
-                log('morebyactor: No actor provided')
-                xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-        
-        # INFO-BASED WIDGET ROUTES (using info module)
-        
-        elif info == 'seasonshowdetails':
-            # Returns TV show details as a single "dummy" item for display at season level
-            dbid = params.get('dbid')
-            if dbid:
-                provider = TVShowDetails()
-                show_info = provider.get_info(dbid, 'season')
-                
-                # Create a single item with show details
-                if show_info:
-                    # This is a special case - we return one item with show info
-                    # Skins can use this to display show stats at season level
-                    dummy_item = {
-                        'title': show_info.get('title', ''),
-                        'plot': f"{show_info.get('episodes', 0)} episodes | {show_info.get('watchedepisodes', 0)} watched",
-                        'art': show_info.get('art', {}),
-                        'mediatype': 'tvshow'
-                    }
-                    add_items_to_directory([dummy_item], 'tvshow', show_info.get('title', ''))
-                else:
-                    xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-            else:
-                log('seasonshowdetails: No dbid provided')
-                xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-        
-        elif info == 'pathstatswidget':
-            # Returns path statistics as a displayable item
-            path = params.get('path', '')
-            if path:
-                provider = PathStats()
-                stats = provider.get_stats(path)
-                
-                # Create displayable stat items
-                stat_items = [
-                    {
-                        'title': f"Total: {stats.get('count', 0)}",
-                        'plot': f"Watched: {stats.get('watched', 0)} | Unwatched: {stats.get('unwatched', 0)}",
-                        'mediatype': 'video'
-                    }
-                ]
-                add_items_to_directory(stat_items, 'video', 'Statistics')
-            else:
-                xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-        
-        # UNKNOWN ROUTE
-        
-        else:
-            log(f'Unknown info type: {info}')
+        result = entry['handler'](Widgets(), params, limit)
+        if result is None:
             xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-            
+        else:
+            items, mediatype, label = result
+            add_items_to_directory(items, mediatype, label)
     except Exception as e:
         log(f'Error in router: {e}', level='ERROR')
         xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
