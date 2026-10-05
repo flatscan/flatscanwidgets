@@ -51,46 +51,46 @@ class TVShowWidgets(BaseWidget):
     
     # ========== EPISODE WIDGETS ==========
 
-    def get_recently_added_grouped(self, days=60, limit=100, navigate_to=None):
+    def get_recently_added_grouped(self, days=30, limit=100, navigate_to=None):
         """
         Get recently added episodes grouped by time clusters.
-        Episodes added within 24h of each other are grouped together.
+        Episodes added within 20h of each other are grouped together.
         """
         from datetime import datetime, timedelta
         from collections import defaultdict
-        
+
         if navigate_to is None:
             raw_setting = get_setting('recentlyadded.navigation', 'Browse')
-            log(f'Setting raw value: "{raw_setting}"', 'INFO')
             navigate_to = 'first' if raw_setting == 'First Episode' else 'browse'
-            log(f'Navigate to resolved: "{navigate_to}"', 'INFO')
-        
-        cutoff = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
-        
-        # Get recently added episodes
+
+        # dateadded carries a time, so 'after <date>' means after midnight of that date
+        after_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+
+        # Get recently added episodes, newest first
         result = json_rpc_call('VideoLibrary.GetEpisodes', {
             'properties': self.EPISODE_PROPERTIES,
             'sort': self.get_recent_sort(),
-            'limits': {'start': 0, 'end': 999}
+            'filter': {'field': 'dateadded', 'operator': 'after', 'value': after_date},
         })
-        
+
         episodes = result.get('result', {}).get('episodes', [])
-        
-        # Filter to recent
-        recent_eps = [
-            ep for ep in episodes 
-            if ep.get('dateadded', '')[:10] >= cutoff
-        ]
-        
+
+        # Pair each episode with its parsed dateadded; skip missing/malformed dates.
+        # (fromisoformat, not strptime: strptime raises TypeError in Kodi's embedded Python)
+        dated_eps = []
+        for ep in episodes:
+            try:
+                dated_eps.append((datetime.fromisoformat(ep.get('dateadded', '')), ep))
+            except (ValueError, TypeError):
+                log(f'Skipping episode {ep.get("episodeid")} with invalid dateadded: {ep.get("dateadded")!r}')
+        dated_eps.sort(key=lambda pair: pair[0], reverse=True)
+
         # Group episodes into time clusters (within 20h of the most recent in cluster)
         clusters = []
         current_cluster = []
         cluster_end_time = None  # Track the most recent episode in cluster
-        
-        # Sort by dateadded descending (most recent first)
-        for ep in sorted(recent_eps, key=lambda x: x.get('dateadded', ''), reverse=True):
-            ep_time = datetime.fromisoformat(ep.get('dateadded', '').replace('Z', '+00:00'))
-            
+
+        for ep_time, ep in dated_eps:
             if cluster_end_time is None:
                 # Start new cluster with most recent episode
                 cluster_end_time = ep_time
@@ -104,7 +104,7 @@ class TVShowWidgets(BaseWidget):
                 clusters.append(current_cluster)
                 cluster_end_time = ep_time
                 current_cluster = [ep]
-        
+
         # Don't forget the last cluster
         if current_cluster:
             clusters.append(current_cluster)
