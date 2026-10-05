@@ -51,7 +51,7 @@ class TVShowWidgets(BaseWidget):
     
     # ========== EPISODE WIDGETS ==========
 
-    def get_recently_added_grouped(self, days=60, limit=999, navigate_to=None):
+    def get_recently_added_grouped(self, days=60, limit=100, navigate_to=None):
         """
         Get recently added episodes grouped by time clusters.
         Episodes added within 24h of each other are grouped together.
@@ -345,67 +345,39 @@ class TVShowWidgets(BaseWidget):
         Get episodes that aired in the last X days.
         """
         from datetime import datetime, timedelta
-        
-        log(f'=== Recently Aired: Starting (last {days} days) ===')
-        
-        # Calculate cutoff date
-        cutoff_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
-        log(f'Cutoff date: {cutoff_date}')
-        
-        # Get episodes - try without firstaired first to see if it exists
+
+        # 'after' is exclusive, so start one day before the cutoff
+        after_date = (datetime.now() - timedelta(days=days + 1)).strftime('%Y-%m-%d')
+
         result = json_rpc_call('VideoLibrary.GetEpisodes', {
             'properties': self.EPISODE_PROPERTIES,
             'sort': self.get_recentlyaired_sort(),
-            'limits': {'start': 0, 'end': 50}
+            'filter': {'field': 'airdate', 'operator': 'after', 'value': after_date},
+            'limits': {'start': 0, 'end': limit}
         })
-        
+
         episodes = result.get('result', {}).get('episodes', [])
-        log(f'Total episodes retrieved: {len(episodes)}')
-        
-        if not episodes:
-            log('No episodes found in library')
-            return []
-        
-        # Debug: Log first few episodes to see data format
-        for i, ep in enumerate(episodes[:3]):
-            log(f'Episode {i}: {ep.get("showtitle")} S{ep.get("season")}E{ep.get("episode")} - firstaired: "{ep.get("firstaired")}"')
-        
-        # Filter episodes
+        today = datetime.now().strftime('%Y-%m-%d')
+
         recent_episodes = []
         for ep in episodes:
             airdate = ep.get('firstaired', '')
-            
-            # Skip if no airdate
-            if not airdate:
+            # Skip undated episodes and ones that have not aired yet
+            if not airdate or airdate > today:
                 continue
-                
-            # Handle different date formats
-            try:
-                # Kodi usually returns YYYY-MM-DD
-                if airdate >= cutoff_date:
-                    ep['mediatype'] = 'episode'
-                    
-                    # Get season artwork
-                    show_id = ep.get('tvshowid')
-                    season_num = ep.get('season', 1)
-                    season_art = self._get_season_art(show_id, season_num)
-                    
-                    ep['art'] = {
-                        'thumb': ep.get('thumbnail', ''),
-                        'poster': season_art.get('poster', ''),
-                        'season.poster': season_art.get('poster', ''),
-                        'fanart': season_art.get('fanart', ''),
-                        'banner': season_art.get('banner', ''),
-                    }
-                    
-                    recent_episodes.append(ep)
-                    
-                    if len(recent_episodes) >= limit:
-                        break
-            except Exception as e:
-                log(f'Error processing episode airdate "{airdate}": {e}')
-        
-        log(f'=== Recently Aired: Returning {len(recent_episodes)} episodes ===')
+
+            ep['mediatype'] = 'episode'
+
+            season_art = self._get_season_art(ep.get('tvshowid'), ep.get('season', 1))
+            ep['art'] = {
+                'thumb': ep.get('thumbnail', ''),
+                'poster': season_art.get('poster', ''),
+                'season.poster': season_art.get('poster', ''),
+                'fanart': season_art.get('fanart', ''),
+                'banner': season_art.get('banner', ''),
+            }
+            recent_episodes.append(ep)
+
         return recent_episodes
     
     def get_inprogress_episodes(self, limit=20):

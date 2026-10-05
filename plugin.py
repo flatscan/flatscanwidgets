@@ -404,8 +404,8 @@ def router():
         show_root_listing()
         return
     
-    # Get limit parameter (default 20)
-    limit = int(params.get('limit', 999))
+    # Get limit parameter (default 100)
+    limit = int(params.get('limit', 100))
     
     # Initialize widget classes
     movies = MovieWidgets()
@@ -448,23 +448,6 @@ def router():
             items = shows.get_recently_updated(limit=limit)
             add_items_to_directory(items, 'tvshow', 'Recently Updated Shows')
 
-        # TV SHOW WIDGETS
-        elif info == 'inprogressepisodes':
-            items = shows.get_inprogress(limit=limit)
-            add_items_to_directory(items, 'episode', 'In Progress Episodes')
-            
-        elif info == 'nextup':
-            items = shows.get_next_up(limit=limit)
-            add_items_to_directory(items, 'episode', 'Next Up')
-            
-        elif info == 'recentepisodes':
-            items = shows.get_recent_episodes(limit=limit)
-            add_items_to_directory(items, 'episode', 'Recent Episodes')
-            
-        elif info == 'recenttvshows':
-            items = shows.get_recently_updated(limit=limit)
-            add_items_to_directory(items, 'tvshow', 'Recently Updated Shows')
-            
         elif info == 'tvshowgenres':
             items = shows.get_genres()
             add_items_to_directory(items, 'genre', 'TV Show Genres')

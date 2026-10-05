@@ -89,8 +89,8 @@ class BaseWidget:
         }
 
     def get_recentlyaired_sort(self):
-            """Get sort by year, descending."""
-            return {
-                'order': 'descending',
-                'method': 'year'
-            }
+        """Get sort by air date (Kodi sorts episodes by firstaired under "year"), descending."""
+        return {
+            'order': 'descending',
+            'method': 'year'  # for episodes Kodi sorts this by full air date
+        }
