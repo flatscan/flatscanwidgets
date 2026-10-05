@@ -17,7 +17,6 @@ import xbmc
 import xbmcgui
 from resources.lib.addon import ADDON
 from resources.lib.logger import log
-from resources.lib.service.blur_service import BlurService
 from resources.lib.service.fanart_service import FanartService
 
 class ServiceMonitor(xbmc.Monitor):
@@ -32,7 +31,6 @@ class ServiceMonitor(xbmc.Monitor):
         self._restart = False
         
         # Initialize sub-services
-        self.blur_service = BlurService()
         self.fanart_service = FanartService()
         
         log('Service: Initialized')
@@ -48,7 +46,6 @@ class ServiceMonitor(xbmc.Monitor):
             return
             
         # Start sub-services
-        self.blur_service.start()
         self.fanart_service.start()
         
         # Main service loop
@@ -88,7 +85,6 @@ class ServiceMonitor(xbmc.Monitor):
     def _cleanup(self):
         """Cleanup on shutdown."""
         log('Service: Cleaning up...')
-        self.blur_service.stop()
         self.fanart_service.stop()
         self._shutdown = True
         
@@ -110,7 +106,12 @@ class ServiceMonitor(xbmc.Monitor):
             xbmcgui.Window(10000).setProperty('FlatscanWidgetUpdate', '1')
             xbmc.sleep(100)
             xbmcgui.Window(10000).clearProperty('FlatscanWidgetUpdate')
-            
+
+        # Restart requested by RunScript(script.flatscan.widgets,action=restartservice)
+        elif sender == 'script.flatscan.widgets' and method == 'Other.restart_service':
+            log('Service: Restart requested via script')
+            self._restart = True
+
     def onSettingsChanged(self):
         """Handle settings changes."""
         log('Service: Settings changed')
@@ -119,13 +120,11 @@ class ServiceMonitor(xbmc.Monitor):
     def onScreensaverActivated(self):
         """Handle screensaver activation."""
         log('Service: Screensaver activated')
-        self.blur_service.pause()
         self.fanart_service.pause()
         
     def onScreensaverDeactivated(self):
         """Handle screensaver deactivation."""
         log('Service: Screensaver deactivated')
-        self.blur_service.resume()
         self.fanart_service.resume()
 
 

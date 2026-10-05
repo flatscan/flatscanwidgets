@@ -6,14 +6,6 @@
 		<setting id="debug" type="bool" label="Enable debug logging" default="false"/>
 	</category>
 
-	<!-- Blur Settings -->
-	<category label="Background Blur">
-		<setting id="blur_enabled" type="bool" label="Enable blur effect" default="true"/>
-		<setting id="blur_interval" type="number" label="Check interval (ms)" default="500"/>
-		<setting id="blur_radius" type="number" label="Blur radius" default="20"/>
-		<setting id="blur_saturation" type="text" label="Saturation (0.0-2.0)" default="1.0"/>
-	</category>
-
 	<!-- Fanart Settings -->
 	<category label="Background Fanart">
 		<setting id="fanart_enabled" type="bool" label="Enable fanart rotation" default="true"/>
