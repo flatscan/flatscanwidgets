@@ -9,11 +9,6 @@ import sys
 import os
 import urllib.parse
 
-import xbmc
-
-# Force debug logging for testing
-xbmc.log('=== Flatscan Widgets: Plugin starting ===', xbmc.LOGINFO)
-
 # Add addon path to Python path
 addon_path = os.path.dirname(os.path.abspath(__file__))
 if addon_path not in sys.path:

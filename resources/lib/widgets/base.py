@@ -20,7 +20,14 @@ class BaseWidget:
         Args:
             handle: Plugin handle (for plugin:// calls)
         """
-        self.handle = handle or int(sys.argv[1]) if len(sys.argv) > 1 else -1
+        if handle is None:
+            # sys.argv[1] is the handle for plugin:// calls, but a RunScript
+            # argument (e.g. 'action=...') or missing in other contexts
+            try:
+                handle = int(sys.argv[1])
+            except (IndexError, ValueError):
+                handle = -1
+        self.handle = handle
         self.li = []  # List items accumulator
         
     def add_list_item(self, item_data, content_type):
