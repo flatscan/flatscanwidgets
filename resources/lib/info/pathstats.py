@@ -15,128 +15,75 @@ from resources.lib.logger import log
 class PathStats(InfoProvider):
     """
     Provides statistics for library paths.
-    
-    Can count items in:
-    - Library paths (e.g., videodb://movies/genres/1/)
-    - Playlists (smart or standard)
-    - Plugin paths (with limitations)
+
+    Counts whatever Kodi lists for the path (Files.GetDirectory), so it works
+    for filtered library nodes (e.g. videodb://movies/genres/1/), smart and
+    standard playlists, and plugin paths.
     """
-    
-    def __init__(self):
-        super().__init__()
-        
-    def get_stats(self, path, content_type='video'):
+
+    MEDIA_TYPES = ('movie', 'tvshow', 'season', 'episode', 'musicvideo')
+
+    def get_stats(self, path):
         """
         Get statistics for a path.
-        
+
         Args:
             path: The path to analyze (e.g., 'videodb://movies/genres/1/')
-            content_type: 'video', 'movies', 'tvshows', 'episodes'
-            
+
         Returns:
-            Dict with statistics
+            Dict with count/watched/unwatched/inprogress/type. When the path
+            lists TV shows or seasons it also has episodes/watchedepisodes/
+            unwatchedepisodes totals.
         """
         log(f'Getting path stats for: {path}')
-        
-        # Determine which library call to make based on path
-        if 'videodb://movies' in path or content_type == 'movies':
-            return self._get_movie_stats(path)
-        elif 'videodb://tvshows' in path or content_type == 'tvshows':
-            return self._get_tvshow_stats(path)
-        elif 'videodb://episodes' in path or content_type == 'episodes':
-            return self._get_episode_stats(path)
-        else:
-            # Generic video query
-            return self._get_generic_stats(path)
-            
-    def _get_movie_stats(self, path):
-        """Get statistics for movie paths."""
-        # Extract filter from path if it's a genre/path filter
-        filter_data = self._parse_path_filter(path)
-        
-        params = {
-            'properties': ['playcount', 'resume'],
-            'limits': {'start': 0, 'end': 99999}  # Get all
-        }
-        
-        if filter_data:
-            params['filter'] = filter_data
-            
-        result = json_rpc_call('VideoLibrary.GetMovies', params)
-        movies = result.get('result', {}).get('movies', [])
-        
-        return self._calculate_stats(movies, 'movie')
-        
-    def _get_tvshow_stats(self, path):
-        """Get statistics for TV show paths."""
-        result = json_rpc_call('VideoLibrary.GetTVShows', {
-            'properties': ['episode', 'watchedepisodes', 'playcount'],
-            'limits': {'start': 0, 'end': 99999}
+
+        result = json_rpc_call('Files.GetDirectory', {
+            'directory': path,
+            'media': 'video',
+            'properties': ['playcount', 'resume', 'episode', 'watchedepisodes'],
         })
-        
-        shows = result.get('result', {}).get('tvshows', [])
-        
-        total_episodes = sum(s.get('episode', 0) for s in shows)
-        watched_episodes = sum(s.get('watchedepisodes', 0) for s in shows)
-        total_shows = len(shows)
-        watched_shows = sum(1 for s in shows if s.get('playcount', 0) > 0)
-        
-        return {
-            'count': total_shows,
-            'watched': watched_shows,
-            'unwatched': total_shows - watched_shows,
-            'episodes': total_episodes,
-            'watchedepisodes': watched_episodes,
-            'unwatchedepisodes': total_episodes - watched_episodes,
-            'inprogress': 0,  # Would need additional query
-            'type': 'tvshow'
-        }
-        
-    def _get_episode_stats(self, path):
-        """Get statistics for episode paths."""
-        result = json_rpc_call('VideoLibrary.GetEpisodes', {
-            'properties': ['playcount', 'resume'],
-            'limits': {'start': 0, 'end': 99999}
-        })
-        
-        episodes = result.get('result', {}).get('episodes', [])
-        return self._calculate_stats(episodes, 'episode')
-        
-    def _get_generic_stats(self, path):
-        """Generic stats for unknown path types."""
-        # Try to get all content types and merge
-        stats = {
-            'count': 0,
-            'watched': 0,
-            'unwatched': 0,
-            'inprogress': 0,
-            'type': 'unknown'
-        }
-        
-        # This is a simplified version - full implementation would parse path
-        return stats
-        
-    def _calculate_stats(self, items, item_type):
-        """Calculate statistics from item list."""
+        files = result.get('result', {}).get('files', [])
+
+        # Library nodes also list sub-folders (genres, years, ...); only count media
+        items = [
+            f for f in files
+            if f.get('type') in self.MEDIA_TYPES
+            or (f.get('filetype') == 'file' and not f.get('type'))
+        ]
+        return self._calculate_stats(items)
+
+    def _calculate_stats(self, items):
+        """Calculate statistics from a list of directory items."""
         total = len(items)
         watched = sum(1 for i in items if i.get('playcount', 0) > 0)
-        inprogress = sum(1 for i in items if i.get('resume', {}).get('position', 0) > 0)
-        
-        return {
+
+        types = {i.get('type') or 'video' for i in items}
+        item_type = types.pop() if len(types) == 1 else ('mixed' if types else 'unknown')
+
+        stats = {
             'count': total,
             'watched': watched,
             'unwatched': total - watched,
-            'inprogress': inprogress,
-            'type': item_type
+            'type': item_type,
         }
-        
-    def _parse_path_filter(self, path):
-        """Parse a Kodi path to extract filter parameters."""
-        # This would parse paths like videodb://movies/genres/1/
-        # and convert to JSON-RPC filters
-        # Simplified implementation - full version would be more complex
-        return None
-        
+
+        # Shows and seasons: in progress = partly watched; also total the episodes
+        group_items = [i for i in items if i.get('type') in ('tvshow', 'season')]
+        if group_items:
+            episodes = sum(i.get('episode', 0) for i in group_items)
+            watched_episodes = sum(i.get('watchedepisodes', 0) for i in group_items)
+            stats['episodes'] = episodes
+            stats['watchedepisodes'] = watched_episodes
+            stats['unwatchedepisodes'] = episodes - watched_episodes
+
+        def in_progress(item):
+            if item.get('type') in ('tvshow', 'season'):
+                return 0 < item.get('watchedepisodes', 0) < item.get('episode', 0)
+            return item.get('resume', {}).get('position', 0) > 0
+
+        stats['inprogress'] = sum(1 for i in items if in_progress(i))
+        return stats
+
     def set_window_properties(self, path, prop_prefix='PathStats', window_id=10000):
         """
         Set window properties for a path's statistics.

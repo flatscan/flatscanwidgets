@@ -53,7 +53,7 @@ URL/playability rules in `add_items_to_directory`:
   - `get_recently_added_grouped`: clusters episodes added within 20 h of the newest in the cluster, then per show emits a single episode, a season group, or a show group. `_set_navigation` makes groups either browse folders or play the first episode, per the `recentlyadded.navigation` setting.
   - `get_sonarr_upcoming`: calls Sonarr `/api/v3/calendar` via `urllib` (10 s timeout), skips episodes with files. Its `tvshowid` is Sonarr's `tvdbId`, not a Kodi DBID.
   - Per-instance `_season_art_cache` / `_show_art_cache` back `_get_combined_art` to avoid repeated lookups.
-- [info/](resources/lib/info/) — `InfoProvider` subclasses (`TVShowDetails`, `PathStats`) that set window properties for `RunScript` actions and also back the `seasonshowdetails` / `pathstatswidget` routes. `PathStats._parse_path_filter` and `_get_generic_stats` are stubs: movie stats ignore the path filter, and TV/episode stats count the whole library.
+- [info/](resources/lib/info/) — `InfoProvider` subclasses (`TVShowDetails`, `PathStats`) that set window properties for `RunScript` actions and also back the `seasonshowdetails` / `pathstatswidget` routes. `PathStats` counts the media items Kodi lists for the path via `Files.GetDirectory` (sub-folders are ignored), so filtered nodes and playlists work.
 - [service/](resources/lib/service/) — `ServiceMonitor` (`xbmc.Monitor`) runs `FanartService` (daemon thread), pauses it on screensaver, and restarts itself (by re-running `__init__` + `start`) on settings change or restart notification. `artwork_cache` runs once 30 s after startup and currently only logs which images aren't in the texture cache; it doesn't force downloads.
 
 ## Conventions and gotchas
