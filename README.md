@@ -95,7 +95,8 @@ RunScript(script.flatscan.widgets,action=pathstats,path=videodb://tvshows/titles
 When enabled, the service:
 
 - Rotates random fanart from movies, TV shows and music artists, exposed through the `FlatscanBackground`, `FlatscanBackgroundTitle` and `FlatscanBackgroundType` home window properties.
-- Pre-caches widget artwork.
+- Warms Kodi's texture cache for the artwork your widgets display, so rows paint quickly instead of waiting on remote image downloads. It re-runs when the video library updates and every ten minutes, and caches a limited number of images per run (the rest follow on the next run).
+- Keeps the Sonarr calendar cached on disk so the Upcoming Episodes widget does not wait on the network.
 - Sets the `FlatscanWidgetUpdate` home window property briefly (about 100 ms) whenever the video library updates, so skins can refresh widgets.
 - Pauses during the screensaver and restarts when settings change.
 
@@ -105,7 +106,7 @@ To refresh a skin container when the library changes, key it off the property, f
 
 | Category | Options |
 |---|---|
-| General | Enable background service, debug logging |
+| General | Enable background service, pre-cache widget artwork, debug logging |
 | Background Fanart | Enable, rotation interval (seconds), include movies / TV shows / music |
 | Widget Behavior | Recently Added navigation: `Browse` or `First Episode` |
 | Sonarr Integration | Enable, URL, API key, days ahead (1-30) |
@@ -118,14 +119,15 @@ The `upcomingepisodes` widget reads your Sonarr calendar (`/api/v3/calendar`) an
 2. Set the Sonarr **URL** (for example `http://localhost:8989`) and the **API key** (Sonarr → Settings → General).
 3. Choose how many days ahead to show (1-30). The `days` URL parameter overrides this per widget.
 
-The request has a 10 second timeout, so a slow or unreachable Sonarr server makes the widget load slowly or show nothing.
+The calendar is cached on disk for up to 30 minutes, and the background service refreshes it about every ten minutes, so the widget itself loads instantly. Slow DNS or a slow Sonarr server only delays the service's refresh. If the service is disabled, or the cache is missing or older than 30 minutes, the widget fetches live instead (10 second timeout) and falls back to the last cached data if Sonarr cannot be reached. The cache always covers 30 days; larger `days` values bypass it.
 
 ## Troubleshooting
 
 - **Enable debug logging** in the General settings. Without it, the add-on's debug messages are hidden; with it, they appear at INFO level in `kodi.log`. Look for lines containing `script.flatscan.widgets`.
 - **A widget is empty:** check that required parameters (`dbid`, `season`, `actor`, `path`) are present, and look for `Error in router` in the log.
 - **Upcoming Episodes is empty:** confirm Sonarr is enabled, the URL is reachable from the Kodi device, and the API key is correct. Failures are logged as `Sonarr API error`.
-- **Large `limit` values are slow** for widgets that look up season artwork per episode (such as `recentlyaired`). Use a modest `limit` for home-screen widgets.
+- **Images pop in late on the first view:** artwork is downloaded the first time Kodi displays it. Keep *Pre-cache widget artwork* enabled so the background service does this ahead of time; with debug logging on you will see `ArtworkCache:` lines in the log.
+- **The first Upcoming Episodes load is slow:** with an empty cache the widget has to fetch from Sonarr itself. It is fast once the service has refreshed the cache.
 
 ## Development
 
@@ -149,6 +151,9 @@ Tips:
 
 - Prefer server-side filters and sorting in `VideoLibrary` JSON-RPC calls (for example `airdate` / `dateadded` with the `after` operator) over fetching large lists and filtering in Python.
 - Kodi's embedded Python behaves differently from desktop Python in places. For example `datetime.strptime` can raise `TypeError`; use `datetime.fromisoformat` instead.
+- Each plugin call runs in a fresh Python process, so an in-memory cache never survives between widget loads. Avoid per-item JSON-RPC lookups (they add up quickly: `GetSeasons` and `GetSeasonDetails` cost about 0.1 s each). Kodi already puts inherited season and show art on every episode (`season.poster`, `tvshow.fanart`, ...), which `BaseWidget.episode_art()` turns into widget art. For slow data that must be looked up, use `resources/lib/cache.py` (JSON files in the add-on profile), optionally refreshed by the service.
+- Sorting a whole library by `dateadded` is slow; `BaseWidget.get_recently_added()` filters to a recent date window first and only falls back to the full sort when needed.
+- Request only the properties a widget uses. `cast`, `writer`, `director` and similar roughly double the cost of a query.
 - You can exercise a widget without a skin by calling `Files.GetDirectory` over JSON-RPC with the `plugin://` path.
 
 ## Project layout
@@ -163,10 +168,11 @@ resources/
   lib/
     addon.py         Add-on handle and settings helper
     kodi_utils.py    JSON-RPC helper
+    cache.py         On-disk JSON cache in the add-on profile
     logger.py        Logging (honours the debug setting)
     widgets/         Widget data providers (tvshows, movies, mixed)
     info/            Window-property info providers
-    service/         Fanart, artwork-cache services and monitor
+    service/         Fanart and artwork-cache services, and the monitor
 ```
 
 ## Links
