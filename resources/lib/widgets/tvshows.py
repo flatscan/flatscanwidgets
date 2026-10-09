@@ -399,7 +399,7 @@ class TVShowWidgets(BaseWidget):
         """
         Get next episodes to watch with season posters.
         """
-        log('=== Next Up: Starting ===', 'INFO')
+        log(f'Getting next up episodes (limit: {limit})')
         
         try:
             # Get shows with watched episodes
@@ -440,10 +440,6 @@ class TVShowWidgets(BaseWidget):
                     season_num = ep.get('season', 1)
                     season_art = self._get_combined_art(show_id, season_num)
                     show_art = self._get_show_art(show_id)
-                    fanart = show_art.get('fanart', '')
-
-                    log(f'=== fanart: {fanart} ', 'INFO')
-                    
                     # Build art dict with season poster as priority
                     ep['art'] = {
                         'thumb': ep.get('thumbnail', ''),  # Episode thumbnail
@@ -461,11 +457,11 @@ class TVShowWidgets(BaseWidget):
                     if len(next_up) >= limit:
                         break
             
-            log(f'=== Next Up: Returning {len(next_up)} episodes ===', 'INFO')
+            log(f'Returning {len(next_up)} next up episodes')
             return next_up
             
         except Exception as e:
-            log(f'Next Up failed: {e}', 'ERROR', 'INFO')
+            log(f'Next Up failed: {e}', 'ERROR')
             return []
 
     def _get_season_art(self, show_id, season_num):
@@ -729,7 +725,7 @@ class TVShowWidgets(BaseWidget):
         headers = {'X-Api-Key': api_key}
         
         try:
-            log(f'Fetching Sonarr calendar: {start} to {end}', 'INFO')
+            log(f'Fetching Sonarr calendar: {start} to {end}')
             
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=10) as response:
@@ -770,7 +766,7 @@ class TVShowWidgets(BaseWidget):
                 if len(items) >= limit:
                     break
 
-            log(f'Found {len(items)} upcoming episodes from Sonarr', 'INFO')
+            log(f'Found {len(items)} upcoming episodes from Sonarr')
             return items
 
         except Exception as e:
