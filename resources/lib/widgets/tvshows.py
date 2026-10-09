@@ -6,7 +6,9 @@ TV show widgets - All TV-related content.
 """
 
 import random
+import time
 from .base import BaseWidget
+from resources.lib import cache
 from resources.lib.kodi_utils import json_rpc_call
 from resources.lib.logger import log
 from resources.lib.addon import get_setting
@@ -14,37 +16,39 @@ from resources.lib.addon import get_setting
 class TVShowWidgets(BaseWidget):
     """TV show and episode widgets."""
     
+    # Only what the list items and widget logic use. cast, writer, director,
+    # votes and the like roughly double the cost of every query.
     EPISODE_PROPERTIES = [
-    'title', 'plot', 'votes', 'rating', 'writer', 
-    'firstaired', 'playcount', 'runtime', 'director', 
-    'productioncode', 'season', 'episode', 'originaltitle', 
-    'showtitle', 'cast', 'fanart', 'thumbnail', 
-    'file',  # <-- Make sure this is included
-    'resume', 'tvshowid', 'dateadded', 'lastplayed', 
-    'art', 'seasonid'
+        'title', 'plot', 'rating', 'firstaired', 'playcount',
+        'runtime', 'season', 'episode', 'showtitle', 'thumbnail',
+        'file', 'resume', 'tvshowid', 'dateadded', 'lastplayed',
+        'art', 'seasonid'
     ]
-    
+
     TVSHOW_PROPERTIES = [
-        'title', 'genre', 'year', 'rating', 'plot', 
-        'studio', 'mpaa', 'cast', 'playcount', 'episode', 
-        'imdbnumber', 'premiered', 'votes', 'lastplayed', 
-        'fanart', 'thumbnail', 'file', 'originaltitle', 
-        'sorttitle', 'episodeguide', 'season', 'watchedepisodes', 
-        'dateadded', 'tag', 'art', 'userrating'
+        'title', 'genre', 'year', 'rating', 'plot',
+        'studio', 'mpaa', 'playcount', 'episode',
+        'imdbnumber', 'premiered', 'lastplayed',
+        'fanart', 'thumbnail', 'file', 'sorttitle',
+        'season', 'watchedepisodes', 'dateadded', 'tag',
+        'art', 'userrating'
     ]
-    
+
+    # Season titles and cache lifetime for _get_season_details
+    SEASON_CACHE_TTL = 24 * 3600
+
+    # Sonarr calendar cache: always fetched for the maximum Days Ahead setting
+    # and filtered per widget, so one cache entry serves every `days` value.
+    SONARR_CACHE_NAME = 'sonarr_upcoming'
+    SONARR_CACHE_DAYS = 30
+    SONARR_CACHE_MAX_AGE = 30 * 60
+
     SEASON_PROPERTIES = [
         'season', 'episode', 'watchedepisodes', 'art', 
         'thumbnail', 'fanart', 'playcount', 'tvshowid',
         'title', 'showtitle'
     ]
 
-    def __init__(self, handle=None):
-        """Initialize with season artwork cache."""
-        super().__init__(handle)
-        self._season_art_cache = {}
-        self._show_art_cache = {}
-    
     # ========== EPISODE WIDGETS ==========
 
     def get_recently_added_grouped(self, days=30, limit=100, navigate_to=None):
@@ -131,12 +135,7 @@ class TVShowWidgets(BaseWidget):
                         # Single episode - return as-is
                         ep = season_eps[0]
                         ep['mediatype'] = 'episode'
-                        season_art = self._get_combined_art(show_id, season_num)
-                        ep['art'] = {
-                            'thumb': ep.get('thumbnail', ''),
-                            'poster': season_art.get('poster', ''),
-                            'fanart': season_art.get('fanart', ''),
-                        }
+                        ep['art'] = self.episode_art(ep)
                         items.append(ep)
                     else:
                         # Multiple episodes in season - create season group
@@ -160,29 +159,23 @@ class TVShowWidgets(BaseWidget):
     def _create_season_group(self, show_id, season_id, season_num, episodes):
         """Create a season-level group item."""
         season_info = self._get_season_details(season_id)
-        season_art = self._get_combined_art(show_id, season_num)
-        
+
         # Sort episodes by episode number
         sorted_eps = sorted(episodes, key=lambda x: x.get('episode', 0))
         first_ep = sorted_eps[0]
-        show_title = season_info.get('showtitle', '')
-        
+        art = self.episode_art(first_ep)
+        show_title = season_info.get('showtitle', '') or first_ep.get('showtitle', '')
+
         # Build the title: use season title if available, otherwise "Season X"
         season_title = season_info.get('title', '')
         display_title = f"{show_title} - {season_title}"
-        
-         
-        
+
         # Build episode list for plot
-        ep_list = '\n'.join([
-            f"Episode {e.get('episode')}: {e.get('title', 'Unknown')}" 
+        plot = '\n'.join([
+            f"Episode {e.get('episode')}: {e.get('title', 'Unknown')}"
             for e in sorted_eps
         ])
-        
-        # Construct plot
-        plot = f"{ep_list}"
-        
-        
+
         return {
             'title': display_title,
             'tvshowtitle': show_title,
@@ -190,53 +183,52 @@ class TVShowWidgets(BaseWidget):
             'tvshowid': show_id,
             'season': season_num,
             'season_title': season_title,  # Store for potential skin use
-            # 'episode': sorted_eps[0].get('episode'),
             'first_episode_file': first_ep.get('file'),
-            'dateadded': sorted_eps[0].get('dateadded'),
+            'dateadded': first_ep.get('dateadded'),
             'mediatype': 'season',
             'is_group': True,
             'group_type': 'season',
             'episode_count': len(episodes),
             'art': {
-                'poster': season_art.get('poster', ''),
-                'fanart': season_art.get('fanart', ''),
-                'banner': season_art.get('banner', ''),
+                'poster': art['poster'],
+                'fanart': art['fanart'],
+                'banner': art['banner'],
             }
         }
 
     def _create_show_group(self, show_id, episodes, season_groups):
         """Create a show-level group item."""
         sorted_seasons = sorted(season_groups.items())
-        
+
         season_summary = '\n'.join([
-            f"Season {s}: {len(eps)} episodes" 
+            f"Season {s}: {len(eps)} episodes"
             for s, eps in sorted_seasons
         ])
-        
+
         show_info = self._get_show_details(show_id)
 
-        show_art = self._get_show_art(show_id)
-        
         # Find first episode
         all_eps = []
         for eps in season_groups.values():
             all_eps.extend(eps)
         all_eps.sort(key=lambda x: (x.get('season'), x.get('episode')))
         first_ep = all_eps[0]
-    
+
+        # Show-level art is inherited on every episode
+        ep_art = first_ep.get('art', {})
+
         plot = show_info.get('plot', '')
         if plot:
             plot = f"{plot}\n{season_summary}"
         else:
             plot = season_summary
-        
+
         return {
             'title': show_info.get('title', ''),
             'tvshowtitle': show_info.get('title', ''),
             'plot': plot,
             'tvshowid': show_id,
             'season': first_ep.get('season'),
-            # 'episode': first_ep.get('episode'),
             'first_episode_file': first_ep.get('file'),
             'dateadded': first_ep.get('dateadded'),
             'mediatype': 'tvshow',
@@ -245,10 +237,10 @@ class TVShowWidgets(BaseWidget):
             'season_count': len(season_groups),
             'episode_count': len(episodes),
             'art': {
-                            'poster': show_art.get('poster', ''),
-                            'fanart': show_art.get('fanart', ''),
-                            'banner': show_art.get('banner', ''),
-                        }
+                'poster': ep_art.get('tvshow.poster', ''),
+                'fanart': ep_art.get('tvshow.fanart', ''),
+                'banner': ep_art.get('tvshow.banner', ''),
+            }
         }
 
     def _set_navigation(self, item, navigate_to):
@@ -285,28 +277,41 @@ class TVShowWidgets(BaseWidget):
             log(f'Set browse URL: {item["file"]}')
 
     def _get_season_details(self, season_id):
-        """Get season details directly by season ID."""
+        """
+        Get a season's title and show title by season ID.
+
+        GetSeasonDetails is slow (about 0.1 s per call) and titles rarely
+        change, so results are kept in the on-disk cache for a day.
+        """
         if not season_id:
             log('Season ID is empty/None!', 'WARNING')
-            return {'title': '', 'art': {}, 'showtitle': ''}
+            return {'title': '', 'showtitle': ''}
+
+        key = str(season_id)
+        entries = cache.read('season_details') or {}
+        now = time.time()
+
+        entry = entries.get(key)
+        if entry and now - entry.get('ts', 0) < self.SEASON_CACHE_TTL:
+            return {'title': entry['title'], 'showtitle': entry['showtitle']}
 
         try:
             result = json_rpc_call('VideoLibrary.GetSeasonDetails', {
                 'seasonid': int(season_id),
-                'properties': self.SEASON_PROPERTIES,
+                'properties': ['title', 'showtitle'],
             })
             season = result.get('result', {}).get('seasondetails', {})
-            log(f'Season {season_id}: "{season.get("showtitle", "")}" - "{season.get("title", "")}"')
+            details = {'title': season.get('title', ''), 'showtitle': season.get('showtitle', '')}
 
-            return {
-                'title': season.get('title', ''),
-                'art': season.get('art', {}),
-                'showtitle': season.get('showtitle', '')
-            }
+            # Drop expired entries while we are rewriting the file anyway
+            entries = {k: v for k, v in entries.items() if now - v.get('ts', 0) < self.SEASON_CACHE_TTL}
+            entries[key] = dict(details, ts=now)
+            cache.write('season_details', entries)
+            return details
         except Exception as e:
             log(f'Failed to get season details: {e}', 'ERROR')
 
-        return {'title': '', 'art': {}, 'showtitle': ''}
+        return {'title': '', 'showtitle': ''}
 
     def _get_show_details(self, show_id):
         """Get TV show details."""
@@ -347,60 +352,37 @@ class TVShowWidgets(BaseWidget):
                 continue
 
             ep['mediatype'] = 'episode'
-
-            season_art = self._get_season_art(ep.get('tvshowid'), ep.get('season', 1))
-            ep['art'] = {
-                'thumb': ep.get('thumbnail', ''),
-                'poster': season_art.get('poster', ''),
-                'season.poster': season_art.get('poster', ''),
-                'fanart': season_art.get('fanart', ''),
-                'banner': season_art.get('banner', ''),
-            }
+            ep['art'] = self.episode_art(ep)
             recent_episodes.append(ep)
 
         return recent_episodes
-    
+
     def get_inprogress_episodes(self, limit=20):
         """Get episodes currently in progress with season posters."""
         log(f'Getting in-progress episodes (limit: {limit})')
-        
+
         result = json_rpc_call('VideoLibrary.GetEpisodes', {
             'properties': self.EPISODE_PROPERTIES,
             'limits': {'start': 0, 'end': limit},
             'sort': self.get_lastplayed_sort(),
             'filter': self.get_inprogress_filter()
         })
-        
+
         episodes = result.get('result', {}).get('episodes', [])
-        
-        # Get season artwork for each episode
+
         for ep in episodes:
             ep['mediatype'] = 'episode'
-            
-            show_id = ep.get('tvshowid')
-            season_num = ep.get('season', 1)
-            
-            # Get season poster
-            season_art = self._get_season_art(show_id, season_num)
-            
-            # Build art with season poster
-            ep['art'] = {
-                'thumb': ep.get('thumbnail', ''),  # Episode thumbnail
-                'poster': season_art.get('poster', ''),  # Season poster
-                'season.poster': season_art.get('poster', ''),
-                'fanart': season_art.get('fanart', '') or ep.get('art', {}).get('fanart', ''),
-                'banner': season_art.get('banner', ''),
-            }
-        
+            ep['art'] = self.episode_art(ep)
+
         log(f'Found {len(episodes)} in-progress episodes')
         return episodes
-    
+
     def get_next_up(self, limit=20):
         """
         Get next episodes to watch with season posters.
         """
         log(f'Getting next up episodes (limit: {limit})')
-        
+
         try:
             # Get shows with watched episodes
             shows_result = json_rpc_call('VideoLibrary.GetTVShows', {
@@ -408,18 +390,18 @@ class TVShowWidgets(BaseWidget):
                 'sort': {'order': 'descending', 'method': 'lastplayed'},
                 'limits': {'start': 0, 'end': 30}
             })
-            
+
             shows = shows_result.get('result', {}).get('tvshows', [])
             next_up = []
-            
+
             for show in shows:
                 show_id = show.get('tvshowid')
                 watched = show.get('watchedepisodes', 0)
                 total = show.get('episode', 0)
-                
+
                 if watched == 0 or watched >= total:
                     continue
-                
+
                 # Get first unwatched episode
                 ep_result = json_rpc_call('VideoLibrary.GetEpisodes', {
                     'tvshowid': int(show_id),
@@ -428,179 +410,72 @@ class TVShowWidgets(BaseWidget):
                     'filter': {'field': 'playcount', 'operator': 'is', 'value': '0'},
                     'limits': {'start': 0, 'end': 1}
                 })
-                
+
                 episodes = ep_result.get('result', {}).get('episodes', [])
-                
+
                 if episodes:
                     ep = episodes[0]
                     ep['mediatype'] = 'episode'
                     ep['show_lastplayed'] = show.get('lastplayed', '')
-                    
-                    # Get season artwork for this episode's season
-                    season_num = ep.get('season', 1)
-                    season_art = self._get_combined_art(show_id, season_num)
-                    show_art = self._get_show_art(show_id)
-                    # Build art dict with season poster as priority
-                    ep['art'] = {
-                        'thumb': ep.get('thumbnail', ''),  # Episode thumbnail
-                        'poster': season_art.get('poster', ''),  # Season poster (main)
-                        'season.poster': season_art.get('poster', ''),
-                        'tvshow.poster': show.get('art', {}).get('poster', ''),  # Fallback
-                        'fanart': show_art.get('fanart', ''),
-                        'tvshow.fanart': show_art.get('fanart', ''),
-                        'banner': season_art.get('banner', '') or show.get('art', {}).get('banner', ''),
-                        'clearlogo': show.get('art', {}).get('clearlogo', ''),
-                    }
-                    
+
+                    # Season art is inherited on the episode; the show's own art
+                    # (already fetched above) takes priority for show-level images
+                    show_art = show.get('art', {})
+                    art = self.episode_art(ep)
+                    art['poster'] = art['poster'] or show_art.get('poster', '')
+                    art['tvshow.poster'] = show_art.get('poster', '') or art['tvshow.poster']
+                    art['fanart'] = show_art.get('fanart', '') or art['fanart']
+                    art['tvshow.fanart'] = art['fanart']
+                    art['banner'] = art['banner'] or show_art.get('banner', '')
+                    art['clearlogo'] = show_art.get('clearlogo', '') or art['clearlogo']
+                    ep['art'] = art
+
                     next_up.append(ep)
-                    
+
                     if len(next_up) >= limit:
                         break
-            
+
             log(f'Returning {len(next_up)} next up episodes')
             return next_up
-            
+
         except Exception as e:
             log(f'Next Up failed: {e}', 'ERROR')
             return []
 
-    def _get_season_art(self, show_id, season_num):
-        """Get season artwork with simple per-season caching."""
-        cache_key = (show_id, season_num)
-        
-        if cache_key not in self._season_art_cache:
-            try:
-                result = json_rpc_call('VideoLibrary.GetSeasons', {
-                    'tvshowid': int(show_id),
-                    'properties': ['art', 'season'],
-                })
-                
-                seasons = result.get('result', {}).get('seasons', [])
-                
-                # Cache all seasons from this show
-                for season in seasons:
-                    key = (show_id, season.get('season'))
-                    art = season.get('art', {})
-                    
-                    # Decode image:// URLs to direct HTTP URLs
-                    for art_key in ['poster', 'fanart', 'banner', 'thumb']:
-                        url = art.get(art_key, '')
-                        if url.startswith('image://'):
-                            import urllib.parse
-                            decoded = url[8:]  # Remove 'image://'
-                            decoded = urllib.parse.unquote(decoded)
-                            # Remove trailing slash if present
-                            if decoded.endswith('/'):
-                                decoded = decoded[:-1]
-                            art[art_key] = decoded
-                    
-                    self._season_art_cache[key] = art
-                    
-            except Exception as e:
-                log(f'Failed to get season art: {e}')
-                return {}
-        
-        return self._season_art_cache.get(cache_key, {})
-
-    def _get_show_art(self, show_id):
-        """Get TV show-level artwork."""
-        if show_id not in self._show_art_cache:
-            try:
-                result = json_rpc_call('VideoLibrary.GetTVShowDetails', {
-                    'tvshowid': int(show_id),
-                    'properties': ['art'],
-                })
-                art = result.get('result', {}).get('tvshowdetails', {}).get('art', {})
-                
-                # Decode image:// URLs to direct HTTP URLs
-                for key in ['fanart', 'poster', 'banner', 'clearlogo']:
-                    url = art.get(key, '')
-                    if url.startswith('image://'):
-                        # Decode the URL
-                        import urllib.parse
-                        decoded = url[8:]  # Remove 'image://'
-                        decoded = urllib.parse.unquote(decoded)
-                        # Remove trailing slash if present
-                        if decoded.endswith('/'):
-                            decoded = decoded[:-1]
-                        art[key] = decoded
-                        log(f'Decoded {key}: {decoded[:80]}...')
-                
-                self._show_art_cache[show_id] = art
-            except Exception as e:
-                log(f'Failed to get show art: {e}')
-                return {}
-        
-        return self._show_art_cache.get(show_id, {})
-
-    def _get_combined_art(self, show_id, season_num):
-        """Get combined season and show artwork."""
-        season_art = self._get_season_art(show_id, season_num)  # Your existing logic
-        show_art = self._get_show_art(show_id)
-        
-        # Merge - season poster takes priority, show provides fanart
-        combined = {}
-        combined.update(show_art)  # Show art first (fanart, banner, etc.)
-        combined.update(season_art)  # Season art overrides (poster)
-
-            
-        return combined
-        
     def get_recent_episodes(self, limit=20):
         """Get recently added episodes with season posters."""
-        result = json_rpc_call('VideoLibrary.GetEpisodes', {
-            'properties': self.EPISODE_PROPERTIES,
-            'limits': {'start': 0, 'end': limit},
-            'sort': self.get_recent_sort()
-        })
-        
-        episodes = result.get('result', {}).get('episodes', [])
-        
+        episodes = self.get_recently_added('VideoLibrary.GetEpisodes', self.EPISODE_PROPERTIES, limit)
+
         for ep in episodes:
             ep['mediatype'] = 'episode'
-            
-            show_id = ep.get('tvshowid')
-            season_num = ep.get('season', 1)
-            
-            # Get season poster
-            season_art = self._get_season_art(show_id, season_num)
-            
-            ep['art'] = {
-                'thumb': ep.get('thumbnail', ''),
-                'poster': season_art.get('poster', ''),
-                'season.poster': season_art.get('poster', ''),
-                'fanart': season_art.get('fanart', '') or ep.get('art', {}).get('fanart', ''),
-                'banner': season_art.get('banner', ''),
-            }
-        
+            ep['art'] = self.episode_art(ep)
+
         return episodes
-    
+
     def get_episodes_of_season(self, tvshowid, season, limit=100):
         """Get all episodes of a specific season."""
+        # tvshowid and season are native GetEpisodes parameters, not filter fields
         result = json_rpc_call('VideoLibrary.GetEpisodes', {
+            'tvshowid': int(tvshowid),
+            'season': int(season),
             'properties': self.EPISODE_PROPERTIES,
             'limits': {'start': 0, 'end': limit},
             'sort': {'order': 'ascending', 'method': 'episode'},
-            'filter': {
-                'and': [
-                    {'field': 'tvshowid', 'operator': 'is', 'value': str(tvshowid)},
-                    {'field': 'season', 'operator': 'is', 'value': str(season)}
-                ]
-            }
         })
-        
+
         episodes = result.get('result', {}).get('episodes', [])
         for ep in episodes:
             ep['mediatype'] = 'episode'
-            
+            ep['art'] = self.episode_art(ep)
+
         return episodes
-    
+
     # ========== TV SHOW WIDGETS ==========
     
     def get_recently_updated(self, limit=20):
         """Get TV shows that have new episodes."""
-        # Get recently added episodes
-        recent_eps = self.get_recent_episodes(limit=50)
+        # Only the show ids are needed from the recent episodes
+        recent_eps = self.get_recently_added('VideoLibrary.GetEpisodes', ['tvshowid'], 50)
         
         # Extract unique show IDs in order
         show_ids = []
@@ -692,46 +567,39 @@ class TVShowWidgets(BaseWidget):
     
     # ========== SMART/SUGGESTION WIDGETS ==========
 
-    def get_sonarr_upcoming(self, days=None, limit=100):
+    def _fetch_sonarr_calendar(self, days):
         """
-        Get upcoming episodes from Sonarr.
+        Fetch upcoming episodes without a file from the Sonarr calendar.
+
+        Returns:
+            List of widget item dicts, or None when Sonarr is not configured
+            or the request failed
         """
         import urllib.request
         import urllib.parse
         import json
         from datetime import datetime, timedelta
-        
-        if not get_setting('sonarr.enabled', 'false') == 'true':
-            log('Sonarr not enabled')
-            return []
-        
+
         sonarr_url = get_setting('sonarr.url', '').rstrip('/')
         api_key = get_setting('sonarr.apikey', '')
-        
+
         if not sonarr_url or not api_key:
             log('Sonarr not configured')
-            return []
-        
-        if days is None:
-            days = int(get_setting('sonarr.days', '7'))
-        
+            return None
+
         start = datetime.now().strftime('%Y-%m-%d')
         end = (datetime.now() + timedelta(days=days)).strftime('%Y-%m-%d')
-        
-        # Build URL with parameters
+
         params = urllib.parse.urlencode({'start': start, 'end': end, 'includeSeries': 'true'})
         url = f'{sonarr_url}/api/v3/calendar?{params}'
-        
-        headers = {'X-Api-Key': api_key}
-        
+
         try:
             log(f'Fetching Sonarr calendar: {start} to {end}')
-            
-            req = urllib.request.Request(url, headers=headers)
+
+            req = urllib.request.Request(url, headers={'X-Api-Key': api_key})
             with urllib.request.urlopen(req, timeout=10) as response:
                 episodes = json.loads(response.read().decode('utf-8'))
 
-     
             items = []
             for ep in episodes:
                 if ep.get('hasFile', False):
@@ -750,7 +618,7 @@ class TVShowWidgets(BaseWidget):
                             image_url = f"{sonarr_url}{image_url}"
                         art[cover_type] = image_url
 
-                item = {
+                items.append({
                     'title': ep.get('title', ''),
                     'showtitle': series.get('title', ''),
                     'season': ep.get('seasonNumber', 0),
@@ -760,19 +628,71 @@ class TVShowWidgets(BaseWidget):
                     'plot': ep.get('overview', ''),
                     'tvshowid': series.get('tvdbId', 0),
                     'art': art,
-                }
-                items.append(item)
-
-                if len(items) >= limit:
-                    break
+                })
 
             log(f'Found {len(items)} upcoming episodes from Sonarr')
             return items
 
         except Exception as e:
             log(f'Sonarr API error: {e}', 'ERROR')
+            return None
+
+    def refresh_sonarr_cache(self):
+        """
+        Fetch the Sonarr calendar and store it in the on-disk cache.
+
+        Called by the background service so widget loads never wait on Sonarr
+        (or on DNS and the network on the way to it).
+
+        Returns:
+            True if the cache was refreshed
+        """
+        if get_setting('sonarr.enabled', 'false') != 'true':
+            return False
+
+        items = self._fetch_sonarr_calendar(self.SONARR_CACHE_DAYS)
+        if items is None:
+            return False
+
+        cache.write(self.SONARR_CACHE_NAME, {'url': get_setting('sonarr.url', ''), 'items': items})
+        return True
+
+    def get_sonarr_upcoming(self, days=None, limit=100):
+        """
+        Get upcoming episodes from Sonarr.
+
+        Served from the cache the service keeps fresh. If the cache is missing
+        or old, fetch live (and fall back to stale data if Sonarr is down).
+        """
+        from datetime import datetime, timedelta
+
+        if get_setting('sonarr.enabled', 'false') != 'true':
+            log('Sonarr not enabled')
             return []
-    
+
+        if days is None:
+            days = int(get_setting('sonarr.days', '7'))
+
+        sonarr_url = get_setting('sonarr.url', '')
+
+        if days > self.SONARR_CACHE_DAYS:
+            # Longer than the cached window: go straight to Sonarr
+            items = self._fetch_sonarr_calendar(days) or []
+        else:
+            data = cache.read(self.SONARR_CACHE_NAME, max_age=self.SONARR_CACHE_MAX_AGE)
+            if not data or data.get('url') != sonarr_url:
+                if self.refresh_sonarr_cache():
+                    data = cache.read(self.SONARR_CACHE_NAME)
+                else:
+                    stale = cache.read(self.SONARR_CACHE_NAME)
+                    data = stale if stale and stale.get('url') == sonarr_url else None
+            items = data['items'] if data else []
+
+        today = datetime.now().strftime('%Y-%m-%d')
+        end = (datetime.now() + timedelta(days=days)).strftime('%Y-%m-%d')
+        items = [i for i in items if today <= i.get('firstaired', '') <= end]
+        return items[:limit]
+
     def get_suggestions(self, limit=20):
         """
         Get TV show suggestions based on watched history.
@@ -836,20 +756,18 @@ class TVShowWidgets(BaseWidget):
         if not genres:
             return []
             
-        # Find shows with matching genres
+        # Find shows with matching genres. tvshowid is not a filter field, so
+        # fetch one extra and drop the reference show here.
         similar = json_rpc_call('VideoLibrary.GetTVShows', {
             'properties': self.TVSHOW_PROPERTIES,
-            'limits': {'start': 0, 'end': limit},
+            'limits': {'start': 0, 'end': limit + 1},
             'sort': {'method': 'random'},
-            'filter': {
-                'and': [
-                    {'field': 'genre', 'operator': 'contains', 'value': genres[0]},
-                    {'field': 'tvshowid', 'operator': 'isnot', 'value': str(dbid)}
-                ]
-            }
+            'filter': {'field': 'genre', 'operator': 'contains', 'value': genres[0]}
         }).get('result', {}).get('tvshows', [])
-        
+
+        similar = [show for show in similar if show.get('tvshowid') != int(dbid)][:limit]
+
         for show in similar:
             show['mediatype'] = 'tvshow'
-            
+
         return similar

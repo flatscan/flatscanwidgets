@@ -12,17 +12,16 @@ from resources.lib.logger import log
 class MovieWidgets(BaseWidget):
     """Widgets for movie content."""
     
+    # Only what the list items use; cast, writer, director, streamdetails and
+    # the like are never read from widget items and make queries much slower.
     MOVIE_PROPERTIES = [
-        'title', 'genre', 'year', 'rating', 'director', 
-        'trailer', 'tagline', 'plot', 'plotoutline', 
-        'originaltitle', 'lastplayed', 'playcount', 'writer', 
-        'studio', 'mpaa', 'cast', 'country', 'imdbnumber', 
-        'runtime', 'set', 'showlink', 'streamdetails', 
-        'top250', 'votes', 'fanart', 'thumbnail', 'file', 
-        'sorttitle', 'resume', 'setid', 'dateadded', 
-        'art', 'userrating'
+        'title', 'genre', 'year', 'rating', 'plot',
+        'lastplayed', 'playcount', 'studio', 'mpaa',
+        'country', 'imdbnumber', 'runtime', 'set',
+        'fanart', 'thumbnail', 'file', 'sorttitle',
+        'resume', 'setid', 'dateadded', 'art', 'userrating'
     ]
-    
+
     def get_inprogress(self, limit=20):
         """
         Get movies that are currently in progress.
