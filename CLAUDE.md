@@ -1,0 +1,67 @@
+# CLAUDE.md
+
+Kodi 21 (Omega) add-on `script.flatscan.widgets`: widget paths, skin helper actions and a background service for Kodi skins. Python 3 running inside Kodi's embedded interpreter. Originally forked from Embuary Helper and refactored into modules.
+
+[README.md](README.md) is the user-facing reference (every `info=` widget, its params, script actions, settings, window properties). Keep it in sync when adding or changing widgets/actions.
+
+## No build, no tests
+
+- There is no test suite, linter config, or package manager. Code only runs inside Kodi — `xbmc`, `xbmcgui`, `xbmcplugin`, `xbmcaddon`, `xbmcvfs` don't exist outside it, so modules can't be imported or run with desktop Python.
+- **Deploy:** the default VS Code build task ([.vscode/tasks.json](.vscode/tasks.json)) robocopies the repo (`/MIR`, excluding `.git`, `.vscode`, `__pycache__`, `*.md`) into `%APPDATA%\Kodi\addons\script.flatscan.widgets`. Restart Kodi or reload the add-on afterwards.
+- **Verify:** check `kodi.log` for lines tagged `[script.flatscan.widgets]`; exercise a widget by calling `Files.GetDirectory` over JSON-RPC with its `plugin://script.flatscan.widgets/?info=...` path.
+- Active branch is `update-kodi-21`; `master` is the PR target.
+
+## Three entry points, three separate processes
+
+[addon.xml](addon.xml) declares three extension points. Each runs as its own Python invocation, so they share no in-memory state — they communicate through home-window (10000) properties and Kodi notifications.
+
+| File | Extension point | Invoked by | Args |
+|---|---|---|---|
+| [plugin.py](plugin.py) | `xbmc.python.pluginsource` | `plugin://` widget paths | `sys.argv[1]` = handle, `sys.argv[2]` = `?query` |
+| [default.py](default.py) | `xbmc.python.script` | skin `RunScript(script.flatscan.widgets,action=...,k=v)` | `sys.argv[1:]` = `key=value` strings |
+| [service.py](service.py) | `xbmc.service` | Kodi at startup | none |
+
+Each entry point inserts the add-on root into `sys.path` so `from resources.lib...` imports work. New modules must use absolute `resources.lib.` imports (or relative within a package).
+
+Cross-process signals:
+- `FlatscanWidgetUpdate` home property is pulsed (~100 ms) by the service on `VideoLibrary.OnUpdate`/`OnScanFinished` and by the `refreshwidgets` script action.
+- `restartservice` action sends `NotifyAll(script.flatscan.widgets,restart_service)`; the service receives it as `method == 'Other.restart_service'` in `ServiceMonitor.onNotification`.
+- Fanart rotation writes `FlatscanBackground`, `FlatscanBackgroundTitle`, `FlatscanBackgroundType`.
+
+## Plugin: route registry → widget providers → ListItems
+
+[plugin.py](plugin.py) is the core:
+
+1. `@route(info, category=None, label=None)` registers a handler in `ROUTES`. Routes with a category/label also appear in the browsable menu (root → category → widgets, in definition order). Routes without them (`tvsimilar`, `seasons`, `episodes`, `similarmovies`, …) are path-only.
+2. A handler has signature `(w, params, limit)` where `w` is a `Widgets` bundle (`w.shows`, `w.movies`, `w.mixed`) and returns `(items, mediatype, label)` or `None` to fail the directory (missing required param, feature disabled).
+3. `router()` parses params, defaults `limit` to 100, calls the handler, and catches all exceptions (logged as `Error in router`).
+4. `add_items_to_directory` / `create_listitem` turn item dicts into `xbmcgui.ListItem`s using the `InfoTagVideo` API (not deprecated `setInfo`). Per-item `mediatype` overrides the route's content type, which is how mixed widgets work.
+
+URL/playability rules in `add_items_to_directory`:
+- `episode`: URL is the item's `file`; no file (e.g. Sonarr upcoming) → empty URL, not playable.
+- `movie`: `file`, else `videodb://movies/titles/<id>`.
+- `season`/`tvshow`: folder into `videodb://tvshows/titles/...` unless the item has `is_playable` (then its `file` is played directly).
+- Item dicts carry raw Kodi JSON-RPC field names (`showtitle`, `firstaired`, `resume`, `art`, `tvshowid`/`movieid`/`episodeid`, …) plus custom keys (`mediatype`, `is_playable`, `episode_count`, `season_title`, `tvshowtitle`, `is_group`, `group_type`, `first_episode_file`).
+
+## Library code ([resources/lib/](resources/lib/))
+
+- [addon.py](resources/lib/addon.py) — `ADDON` instance, paths, `get_setting(key, default)` (returns strings; compare bools as `== 'true'`). Creates the profile dir on import.
+- [kodi_utils.py](resources/lib/kodi_utils.py) — `json_rpc_call(method, params)` (returns parsed dict, `{}` on failure — always read via `.get('result', {}).get(...)`), window-property helpers, `notify`.
+- [logger.py](resources/lib/logger.py) — `log(message, level='DEBUG')`; levels are strings (`'DEBUG'`, `'INFO'`, `'WARNING'`, `'ERROR'`).
+- [widgets/](resources/lib/widgets/) — data providers. `BaseWidget` supplies reusable JSON-RPC filter/sort dicts (`get_inprogress_filter`, `get_unwatched_filter`, `get_recent_sort`, `get_lastplayed_sort`, `get_recentlyaired_sort`, `get_random_sort`). Property lists live as class constants (`MovieWidgets.MOVIE_PROPERTIES`, `TVShowWidgets.EPISODE_PROPERTIES` / `TVSHOW_PROPERTIES` / `SEASON_PROPERTIES`) and are reused across classes. `MixedWidgets` composes the other two.
+- [widgets/tvshows.py](resources/lib/widgets/tvshows.py) — largest module. Notable pieces:
+  - `get_recently_added_grouped`: clusters episodes added within 20 h of the newest in the cluster, then per show emits a single episode, a season group, or a show group. `_set_navigation` makes groups either browse folders or play the first episode, per the `recentlyadded.navigation` setting.
+  - `get_sonarr_upcoming`: calls Sonarr `/api/v3/calendar` via `urllib` (10 s timeout), skips episodes with files. Its `tvshowid` is Sonarr's `tvdbId`, not a Kodi DBID.
+  - Per-instance `_season_art_cache` / `_show_art_cache` back `_get_combined_art` to avoid repeated lookups.
+- [info/](resources/lib/info/) — `InfoProvider` subclasses (`TVShowDetails`, `PathStats`) that set window properties for `RunScript` actions and also back the `seasonshowdetails` / `pathstatswidget` routes. `PathStats._parse_path_filter` and `_get_generic_stats` are stubs: movie stats ignore the path filter, and TV/episode stats count the whole library.
+- [service/](resources/lib/service/) — `ServiceMonitor` (`xbmc.Monitor`) runs `FanartService` (daemon thread), pauses it on screensaver, and restarts itself (by re-running `__init__` + `start`) on settings change or restart notification. `artwork_cache` runs once 30 s after startup and currently only logs which images aren't in the texture cache; it doesn't force downloads.
+
+## Conventions and gotchas
+
+- **Adding a widget:** add a method to the right widget class, register a `@route` handler in [plugin.py](plugin.py), add it to the README tables. Adding a script action means a new branch in `route_action` in [default.py](default.py).
+- Prefer server-side JSON-RPC `filter`/`sort`/`limits` (e.g. `dateadded`/`airdate` with `after`) over fetching everything and filtering in Python.
+- Use `datetime.fromisoformat`, not `strptime` — `strptime` can raise `TypeError` in Kodi's embedded Python.
+- For episodes, Kodi's `year` sort method sorts by full air date (see `get_recentlyaired_sort`).
+- Settings are defined in [resources/settings.xml](resources/settings.xml) (old-style flat format). IDs mix styles: `fanart_enabled` vs `sonarr.enabled`, `recentlyadded.navigation`. The service reads them with `getSettingBool`/`getSettingInt`; plugin code uses `get_setting` strings.
+- Files keep the `#!/usr/bin/python` + `# coding: utf-8` header and module docstrings; match it in new files.
+- Log through `log()` rather than `xbmc.log` directly, and default to `'DEBUG'` so messages only surface when the add-on's debug setting is on.
