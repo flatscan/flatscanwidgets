@@ -11,9 +11,6 @@ from resources.lib.kodi_utils import json_rpc_call
 from resources.lib.logger import log
 from resources.lib.addon import get_setting
 
-# Test log right after imports
-log('=== TVSHOWS MODULE LOADED ===', 'INFO')
-
 class TVShowWidgets(BaseWidget):
     """TV show and episode widgets."""
     
@@ -172,7 +169,6 @@ class TVShowWidgets(BaseWidget):
         
         # Build the title: use season title if available, otherwise "Season X"
         season_title = season_info.get('title', '')
-        log(f'Season title: {season_title}', 'DEBUG')
         display_title = f"{show_title} - {season_title}"
         
          
@@ -290,41 +286,26 @@ class TVShowWidgets(BaseWidget):
 
     def _get_season_details(self, season_id):
         """Get season details directly by season ID."""
-        log(f'Getting season details for season_id: {season_id} (type: {type(season_id)})', 'DEBUG')
-        
         if not season_id:
             log('Season ID is empty/None!', 'WARNING')
-            return {'title': '', 'art': {}}
-        
+            return {'title': '', 'art': {}, 'showtitle': ''}
+
         try:
-            log(f'SEASON_PROPERTIES: {self.SEASON_PROPERTIES}', 'DEBUG')
-            
             result = json_rpc_call('VideoLibrary.GetSeasonDetails', {
                 'seasonid': int(season_id),
                 'properties': self.SEASON_PROPERTIES,
             })
-            
-            log(f'Raw result: {result}', 'DEBUG')
-            
             season = result.get('result', {}).get('seasondetails', {})
-            log(f'Season details dict: {season}', 'DEBUG')
-            
-            title = season.get('title', '')
-            log(f'Extracted title: "{title}"', 'DEBUG')
+            log(f'Season {season_id}: "{season.get("showtitle", "")}" - "{season.get("title", "")}"')
 
-            showtitle = season.get('showtitle', '')
-            log(f'Extracted showtitle: "{showtitle}"', 'DEBUG')
-            
             return {
-                'title': title,
+                'title': season.get('title', ''),
                 'art': season.get('art', {}),
-                'showtitle': showtitle
+                'showtitle': season.get('showtitle', '')
             }
         except Exception as e:
             log(f'Failed to get season details: {e}', 'ERROR')
-            import traceback
-            log(traceback.format_exc(), 'ERROR')
-        
+
         return {'title': '', 'art': {}, 'showtitle': ''}
 
     def _get_show_details(self, show_id):
