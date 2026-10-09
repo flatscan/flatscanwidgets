@@ -18,6 +18,7 @@ import xbmcgui
 from resources.lib.addon import ADDON
 from resources.lib.logger import log
 from resources.lib.service.fanart_service import FanartService
+from resources.lib.service.artwork_cache import ArtworkCacheService
 
 class ServiceMonitor(xbmc.Monitor):
     """
@@ -32,6 +33,7 @@ class ServiceMonitor(xbmc.Monitor):
         
         # Initialize sub-services
         self.fanart_service = FanartService()
+        self.artwork_cache = ArtworkCacheService(self)
         
         log('Service: Initialized')
         
@@ -47,6 +49,7 @@ class ServiceMonitor(xbmc.Monitor):
             
         # Start sub-services
         self.fanart_service.start()
+        self.artwork_cache.start()
         
         # Main service loop
         self._run_loop()
@@ -86,6 +89,7 @@ class ServiceMonitor(xbmc.Monitor):
         """Cleanup on shutdown."""
         log('Service: Cleaning up...')
         self.fanart_service.stop()
+        self.artwork_cache.stop()
         self._shutdown = True
         
     # --- Kodi Event Handlers ---
@@ -106,6 +110,9 @@ class ServiceMonitor(xbmc.Monitor):
             xbmcgui.Window(10000).setProperty('FlatscanWidgetUpdate', '1')
             xbmc.sleep(100)
             xbmcgui.Window(10000).clearProperty('FlatscanWidgetUpdate')
+
+            # Re-warm artwork and refresh cached data for the changed library
+            self.artwork_cache.request_refresh()
 
         # Restart requested by RunScript(script.flatscan.widgets,action=restartservice)
         elif sender == 'script.flatscan.widgets' and method == 'Other.restart_service':

@@ -78,7 +78,7 @@ class FanartService:
         
         while self._running:
             if self._paused:
-                xbmc.sleep(1000)
+                self._sleep(1)
                 continue
                 
             try:
@@ -96,8 +96,16 @@ class FanartService:
                 log(f'FanartService: Error - {e}', level='ERROR')
                 
             # Sleep for interval
-            xbmc.sleep(self.interval * 1000)
+            self._sleep(self.interval)
             
+    def _sleep(self, seconds):
+        """Sleep in short slices so stop() takes effect promptly."""
+        slices = int(seconds * 4)
+        for _ in range(slices):
+            if not self._running:
+                return
+            xbmc.sleep(250)
+
     def _refresh_cache(self):
         """Refresh the fanart cache from library."""
         self._fanart_cache = []

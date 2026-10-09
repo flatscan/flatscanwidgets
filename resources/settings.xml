@@ -4,6 +4,7 @@
 	<category label="General">
 		<setting id="service_enabled" type="bool" label="Enable background service" default="true"/>
 		<setting id="debug" type="bool" label="Enable debug logging" default="false"/>
+		<setting id="artwork_cache_enabled" type="bool" label="Pre-cache widget artwork" default="true"/>
 	</category>
 
 	<!-- Fanart Settings -->
