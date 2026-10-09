@@ -26,7 +26,7 @@ plugin://script.flatscan.widgets/?info=<widget>&limit=<n>
 | `info` | Description | Extra params |
 |---|---|---|
 | `inprogressepisodes` | Partially watched episodes | |
-| `nextup` | Next unwatched episode of shows you are watching | |
+| `nextup` | Next unwatched episode of shows you are watching. Specials (season 0) are slotted in by air date rather than always coming first; a special with no air date comes after the last regular episode, and one that aired before an episode you have already watched is treated as skipped | |
 | `recentepisodes` | Recently added episodes | |
 | `recentlyaired` | Episodes that aired in the last N days, newest first. Episodes not yet aired are excluded | `days` (default 90) |
 | `recenttvshows` | Recently updated shows | |

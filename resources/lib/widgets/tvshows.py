@@ -377,9 +377,86 @@ class TVShowWidgets(BaseWidget):
         log(f'Found {len(episodes)} in-progress episodes')
         return episodes
 
+    def _get_unwatched_specials(self):
+        """
+        Get every unwatched special (season 0) in the library, grouped by show.
+
+        One query for the whole library is much cheaper than asking per show.
+
+        Returns:
+            Dict of tvshowid -> list of dicts with tvshowid, episodeid, firstaired
+        """
+        result = json_rpc_call('VideoLibrary.GetEpisodes', {
+            'properties': ['tvshowid', 'firstaired'],
+            'filter': {'and': [
+                {'field': 'season', 'operator': 'is', 'value': '0'},
+                {'field': 'playcount', 'operator': 'is', 'value': '0'},
+            ]},
+        })
+
+        by_show = {}
+        for ep in result.get('result', {}).get('episodes', []):
+            by_show.setdefault(ep.get('tvshowid'), []).append(ep)
+        return by_show
+
+    def _get_last_watched_air_date(self, show_id):
+        """Air date of the furthest regular episode already watched ('' if none)."""
+        result = json_rpc_call('VideoLibrary.GetEpisodes', {
+            'tvshowid': int(show_id),
+            'properties': ['firstaired'],
+            'filter': {'and': [
+                {'field': 'season', 'operator': 'greaterthan', 'value': '0'},
+                {'field': 'playcount', 'operator': 'greaterthan', 'value': '0'},
+            ]},
+            'sort': {'order': 'descending', 'method': 'episode'},
+            'limits': {'start': 0, 'end': 1},
+        })
+        episodes = result.get('result', {}).get('episodes', [])
+        return episodes[0].get('firstaired', '') if episodes else ''
+
+    def _pick_next_up_special(self, show_id, regular, specials):
+        """
+        Decide whether an unwatched special should be Next Up ahead of the next
+        regular episode, ordering specials by air date.
+
+        - A dated special comes before the regular episode that aired after it.
+        - A special with no air date comes after every regular episode.
+        - A special that aired before the last episode you watched is treated as
+          skipped rather than coming up again.
+
+        Args:
+            show_id: TV show id
+            regular: The first unwatched regular episode (dict), or None
+            specials: Unwatched specials of the show (dicts with firstaired)
+
+        Returns:
+            The chosen special (lean dict with episodeid), or None
+        """
+        dated = sorted((sp for sp in specials if sp.get('firstaired')),
+                       key=lambda sp: sp['firstaired'])
+        undated = [sp for sp in specials if not sp.get('firstaired')]
+
+        if dated:
+            last_watched = self._get_last_watched_air_date(show_id)
+            dated = [sp for sp in dated if sp['firstaired'] >= last_watched]
+
+        if regular is None:
+            # Everything regular is watched: remaining specials, dated ones first
+            candidates = dated + undated
+            return candidates[0] if candidates else None
+
+        regular_aired = regular.get('firstaired', '')
+        if dated and regular_aired and dated[0]['firstaired'] <= regular_aired:
+            return dated[0]
+
+        return None
+
     def get_next_up(self, limit=20):
         """
         Get next episodes to watch with season posters.
+
+        Regular episodes come in season and episode order. Specials (season 0)
+        are slotted in by air date instead of always coming first.
         """
         log(f'Getting next up episodes (limit: {limit})')
 
@@ -392,6 +469,7 @@ class TVShowWidgets(BaseWidget):
             })
 
             shows = shows_result.get('result', {}).get('tvshows', [])
+            specials_by_show = self._get_unwatched_specials()
             next_up = []
 
             for show in shows:
@@ -402,19 +480,32 @@ class TVShowWidgets(BaseWidget):
                 if watched == 0 or watched >= total:
                     continue
 
-                # Get first unwatched episode
+                # Get first unwatched regular episode (specials are handled below)
                 ep_result = json_rpc_call('VideoLibrary.GetEpisodes', {
                     'tvshowid': int(show_id),
                     'properties': self.EPISODE_PROPERTIES,
                     'sort': {'order': 'ascending', 'method': 'episode'},
-                    'filter': {'field': 'playcount', 'operator': 'is', 'value': '0'},
+                    'filter': {'and': [
+                        {'field': 'season', 'operator': 'greaterthan', 'value': '0'},
+                        {'field': 'playcount', 'operator': 'is', 'value': '0'},
+                    ]},
                     'limits': {'start': 0, 'end': 1}
                 })
 
                 episodes = ep_result.get('result', {}).get('episodes', [])
+                ep = episodes[0] if episodes else None
 
-                if episodes:
-                    ep = episodes[0]
+                specials = specials_by_show.get(show_id)
+                if specials:
+                    special = self._pick_next_up_special(show_id, ep, specials)
+                    if special:
+                        details = json_rpc_call('VideoLibrary.GetEpisodeDetails', {
+                            'episodeid': special['episodeid'],
+                            'properties': self.EPISODE_PROPERTIES,
+                        })
+                        ep = details.get('result', {}).get('episodedetails') or ep
+
+                if ep:
                     ep['mediatype'] = 'episode'
                     ep['show_lastplayed'] = show.get('lastplayed', '')
 
