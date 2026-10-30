@@ -1,0 +1,6 @@
+# Development files left out of release zips (git archive), see kodi-repo/build.py
+.gitattributes export-ignore
+.gitignore export-ignore
+.vscode export-ignore
+CLAUDE.md export-ignore
+TODO.md export-ignore

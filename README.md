@@ -8,8 +8,12 @@ A widget and helper add-on for Kodi 21 (Omega) skins. It provides library-backed
 
 ## Installation
 
-1. Zip the repository contents so that `addon.xml` is inside a folder named `script.flatscan.widgets`.
-2. In Kodi: **Settings → Add-ons → Install from zip file**.
+Install the Flatscan repository once, and Kodi will keep the add-on up to date:
+
+1. In Kodi, enable **Settings → System → Add-ons → Unknown sources**.
+2. **Settings → File manager → Add source**, enter `https://flatscan.github.io/kodi-repo/` and name it `flatscan`.
+3. **Settings → Add-ons → Install from zip file → flatscan** and pick `repository.flatscan-<version>.zip`.
+4. **Install from repository → Flatscan Repository**, open the category it is listed under and install **Flatscan Widgets**.
 
 ## Using the widgets
 
