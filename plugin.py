@@ -71,6 +71,9 @@ def create_listitem(item_data, content_type):
     elif content_type == 'movie':
         label = item_data.get('title', '')
         label2 = str(item_data.get('year', ''))
+    elif content_type == 'set':
+        label = item_data.get('title', '')
+        label2 = f"{item_data.get('watched', 0)} of {item_data.get('total', 0)} watched"
     else:
         label = item_data.get('title', '')
         label2 = ''
@@ -168,6 +171,7 @@ def create_listitem(item_data, content_type):
         infotag.setPlot(item_data.get('plot', ''))
         infotag.setRating(float(item_data.get('rating', 0)))
         infotag.setYear(int(item_data.get('year', 0)) if item_data.get('year') else 0)
+        infotag.setPremiered(item_data.get('premiered', ''))
         infotag.setGenres(item_data.get('genre', []))
         infotag.setMpaa(item_data.get('mpaa', ''))
         infotag.setDuration(int(item_data.get('runtime', 0)))
@@ -193,9 +197,24 @@ def create_listitem(item_data, content_type):
             li.setIsFolder(False)
         else:
             li.setIsFolder(True)
-    
+
+    elif content_type == 'set':
+        infotag = li.getVideoInfoTag()
+        infotag.setTitle(item_data.get('title', ''))
+        infotag.setPlot(item_data.get('plot', ''))
+        infotag.setMediaType('set')
+        infotag.setPlaycount(0)
+        watched = item_data.get('watched', 0)
+        total = item_data.get('total', 0)
+        li.setProperty('WatchedCount', str(watched))
+        li.setProperty('TotalCount', str(total))
+        li.setProperty('UnwatchedCount', str(total - watched))
+        li.setProperty('NextTitle', item_data.get('next_title', ''))
+        li.setIsFolder(True)
+
     # Add DBID property
-    dbid = item_data.get('tvshowid') or item_data.get('movieid') or item_data.get('episodeid', '')
+    dbid = (item_data.get('tvshowid') or item_data.get('movieid') or item_data.get('episodeid')
+            or item_data.get('setid', ''))
     li.setProperty('dbid', str(dbid))
     
     # Resume info if available
@@ -264,7 +283,11 @@ def add_items_to_directory(items, content_type, category=''):
             else:
                 url = f'videodb://tvshows/titles/{dbid}/'
                 is_folder = True
-            
+
+        elif item_type == 'set':
+            url = f'videodb://movies/sets/{item.get("setid")}/'
+            is_folder = True
+
         else:
             url = ''
             is_folder = False
@@ -406,6 +429,24 @@ def route_recentmovies(w, params, limit):
     unwatched = params.get('unwatched', 'false').lower() == 'true'
     items = w.movies.get_recent(limit=limit, unwatched_only=unwatched)
     return items, 'movie', 'Recent Unwatched Movies' if unwatched else 'Recent Movies'
+
+
+@route('recentlyreleasedmovies', 'movies', 'Recently Released Movies')
+def route_recentlyreleasedmovies(w, params, limit):
+    days = int(params.get('days', 365))
+    unwatched = params.get('unwatched', 'false').lower() == 'true'
+    items = w.movies.get_recently_released(days=days, limit=limit, unwatched_only=unwatched)
+    return items, 'movie', 'Recently Released Unwatched Movies' if unwatched else 'Recently Released Movies'
+
+
+@route('nextincollection', 'movies', 'Next in Collection')
+def route_nextincollection(w, params, limit):
+    return w.movies.get_next_in_collection(limit=limit), 'movie', 'Next in Collection'
+
+
+@route('collectionsinprogress', 'movies', 'Collections in Progress')
+def route_collectionsinprogress(w, params, limit):
+    return w.movies.get_collections_in_progress(limit=limit), 'sets', 'Collections in Progress'
 
 
 @route('randommovies', 'movies', 'Random Movies')

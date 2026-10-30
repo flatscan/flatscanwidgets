@@ -19,6 +19,7 @@
 
 	<category label="Widget Behavior">
         <setting id="recentlyadded.navigation" type="labelenum" label="Recently Added Navigation" values="Browse|First Episode" default="Browse"/>
+        <setting id="nextincollection.exclude" type="text" label="Movie collections: exclude sets (comma-separated)" default=""/>
     </category>
 
 	<category label="Sonarr Integration">

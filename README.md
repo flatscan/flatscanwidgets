@@ -45,6 +45,9 @@ plugin://script.flatscan.widgets/?info=<widget>&limit=<n>
 |---|---|---|
 | `inprogressmovies` | Partially watched movies | |
 | `recentmovies` | Recently added movies | `unwatched=true` |
+| `recentlyreleasedmovies` | Movies released (premiered) in the last N days, newest first; includes pre-release copies with a future date | `days` (default 365), `unwatched=true` |
+| `nextincollection` | For each started movie set, the first unwatched film after the furthest one watched (release order); most recently watched sets first. Sets listed in the exclude setting are skipped | |
+| `collectionsinprogress` | Partly watched movie sets (at least one film watched and one not), with the set's artwork; most recently watched first; selecting one opens the set. Items carry `ListItem.Property(WatchedCount)`, `TotalCount`, `UnwatchedCount` and `NextTitle` (the film `nextincollection` would pick). Sets listed in the exclude setting are skipped | |
 | `randommovies` | Random movies | |
 
 ### Mixed (movies and shows)
@@ -108,7 +111,7 @@ To refresh a skin container when the library changes, key it off the property, f
 |---|---|
 | General | Enable background service, pre-cache widget artwork, debug logging |
 | Background Fanart | Enable, rotation interval (seconds), include movies / TV shows / music |
-| Widget Behavior | Recently Added navigation: `Browse` or `First Episode` |
+| Widget Behavior | Recently Added navigation: `Browse` or `First Episode`; movie collections excluded from Next in Collection and Collections in Progress (comma-separated set names, case-insensitive) |
 | Sonarr Integration | Enable, URL, API key, days ahead (1-30) |
 
 ### Sonarr integration

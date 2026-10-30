@@ -179,6 +179,9 @@ class ArtworkCacheService:
             ('upcomingepisodes', lambda: shows.get_sonarr_upcoming(limit=WIDGET_LIMIT)),
             ('inprogressmovies', lambda: movies.get_inprogress(limit=WIDGET_LIMIT)),
             ('recentmovies', lambda: movies.get_recent(limit=WIDGET_LIMIT)),
+            ('recentlyreleasedmovies', lambda: movies.get_recently_released(limit=WIDGET_LIMIT)),
+            ('nextincollection', lambda: movies.get_next_in_collection(limit=WIDGET_LIMIT)),
+            ('collectionsinprogress', lambda: movies.get_collections_in_progress(limit=WIDGET_LIMIT)),
         ]
 
         # Widgets share artwork (a show's fanart repeats across episodes), so
