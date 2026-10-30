@@ -50,13 +50,8 @@ def route_action(action, args):
     """
     log(f'Routing action: {action}')
     
-    # IMAGE MODULE ACTIONS
-    if action in ['blur', 'blurimg']:
-        from resources.lib.image.blur import ImageBlur
-        handle_blur_action(args)
-        
     # INFO MODULE ACTIONS
-    elif action in ['tvshowdetails', 'seasondetails', 'showdetails']:
+    if action in ['tvshowdetails', 'seasondetails', 'showdetails']:
         from resources.lib.info.tvshowdetails import TVShowDetails
         handle_tvshow_details(args)
         
@@ -69,54 +64,11 @@ def route_action(action, args):
         handle_widget_refresh(args)
         
     # SERVICE CONTROL
-    elif action == 'restartservcie':
+    elif action == 'restartservice':
         handle_service_restart(args)
         
     else:
         log(f'Unknown action: {action}')
-
-
-def handle_blur_action(args):
-    """
-    Handle blur image action.
-    
-    Usage: RunScript(script.flatscan.widgets,action=blur,file=IMAGE_PATH,prop=PREFIX,radius=RADIUS)
-    """
-    file_path = args.get('file')
-    prop_prefix = args.get('prop', 'FlatscanBlur')
-    radius = args.get('radius')
-    saturation = args.get('saturation')
-    
-    if not file_path:
-        log('Blur action: No file specified')
-        return
-        
-    try:
-        from resources.lib.image.blur import ImageBlur
-        
-        # Convert radius to int if provided
-        if radius:
-            radius = int(radius)
-        if saturation:
-            saturation = float(saturation)
-            
-        blur = ImageBlur(
-            file=file_path,
-            radius=radius,
-            saturation=saturation
-        )
-        
-        # Set properties
-        import xbmcgui
-        window = xbmcgui.Window(10000)
-        window.setProperty(f'{prop_prefix}_blurred', blur.filepath)
-        window.setProperty(f'{prop_prefix}_color', blur.avgcolor)
-        window.setProperty(f'{prop_prefix}_color_noalpha', blur.avgcolor[2:])
-        
-        log(f'Blur action: Set properties with prefix {prop_prefix}')
-        
-    except Exception as e:
-        log(f'Blur action failed: {e}', level='ERROR')
 
 
 def handle_tvshow_details(args):
@@ -139,4 +91,84 @@ def handle_tvshow_details(args):
         provider = TVShowDetails()
         provider.set_window_properties(dbid, idtype, window_id)
         
-        log(f'TV show details: Set properties for {id
+        log(f'TV show details: Set properties for {idtype} {dbid}')
+
+    except Exception as e:
+        log(f'TV show details failed: {e}', level='ERROR')
+
+
+def handle_path_stats(args):
+    """
+    Handle path statistics action.
+
+    Usage: RunScript(script.flatscan.widgets,action=pathstats,path=PATH,prop=PREFIX,window=WINDOW_ID)
+    """
+    path = args.get('path')
+    prop_prefix = args.get('prop', 'PathStats')
+    window_id = int(args.get('window', 10000))
+
+    if not path:
+        log('Path stats: No path specified')
+        return
+
+    try:
+        from resources.lib.info.pathstats import PathStats
+
+        provider = PathStats()
+        provider.set_window_properties(path, prop_prefix, window_id)
+
+        log(f'Path stats: Set properties with prefix {prop_prefix}')
+
+    except Exception as e:
+        log(f'Path stats failed: {e}', level='ERROR')
+
+
+def handle_widget_refresh(args):
+    """
+    Handle widget refresh action.
+
+    Pulses the FlatscanWidgetUpdate home window property, the same signal the
+    service sends when the video library updates, so skins can reload widgets.
+
+    Usage: RunScript(script.flatscan.widgets,action=refreshwidgets)
+    """
+    import xbmc
+    import xbmcgui
+
+    window = xbmcgui.Window(10000)
+    window.setProperty('FlatscanWidgetUpdate', '1')
+    xbmc.sleep(100)
+    window.clearProperty('FlatscanWidgetUpdate')
+
+    log('Widget refresh: Pulsed FlatscanWidgetUpdate')
+
+
+def handle_service_restart(args):
+    """
+    Handle service restart action.
+
+    The service runs in its own process, so ask it to restart with a Kodi
+    notification (handled in ServiceMonitor.onNotification).
+
+    Usage: RunScript(script.flatscan.widgets,action=restartservice)
+    """
+    import xbmc
+
+    xbmc.executebuiltin('NotifyAll(script.flatscan.widgets,restart_service)')
+
+    log('Service restart: Requested')
+
+
+def main():
+    """Main entry point for script calls."""
+    args = parse_arguments()
+    action = args.get('action', '')
+
+    if action:
+        route_action(str(action).lower(), args)
+    else:
+        log('No action specified')
+
+
+if __name__ == '__main__':
+    main()

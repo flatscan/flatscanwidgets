@@ -4,14 +4,7 @@
 	<category label="General">
 		<setting id="service_enabled" type="bool" label="Enable background service" default="true"/>
 		<setting id="debug" type="bool" label="Enable debug logging" default="false"/>
-	</category>
-
-	<!-- Blur Settings -->
-	<category label="Background Blur">
-		<setting id="blur_enabled" type="bool" label="Enable blur effect" default="true"/>
-		<setting id="blur_interval" type="number" label="Check interval (ms)" default="500"/>
-		<setting id="blur_radius" type="number" label="Blur radius" default="20"/>
-		<setting id="blur_saturation" type="text" label="Saturation (0.0-2.0)" default="1.0"/>
+		<setting id="artwork_cache_enabled" type="bool" label="Pre-cache widget artwork" default="true"/>
 	</category>
 
 	<!-- Fanart Settings -->
@@ -26,6 +19,7 @@
 
 	<category label="Widget Behavior">
         <setting id="recentlyadded.navigation" type="labelenum" label="Recently Added Navigation" values="Browse|First Episode" default="Browse"/>
+        <setting id="nextincollection.exclude" type="text" label="Movie collections: exclude sets (comma-separated)" default=""/>
     </category>
 
 	<category label="Sonarr Integration">

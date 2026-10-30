@@ -2,6 +2,7 @@
 # coding: utf-8
 
 import xbmc
+import xbmcaddon
 
 ADDON_ID = 'script.flatscan.widgets'
 
@@ -20,7 +21,7 @@ def log(message, level='DEBUG'):
         debug_enabled = addon.getSettingBool('debug')
         if debug_enabled and level.upper() == 'DEBUG':
             level = 'INFO'
-    except:
+    except Exception:
         pass
     
     log_level = level_map.get(level.upper(), xbmc.LOGDEBUG)

@@ -6,7 +6,6 @@
     
     <requires>
         <import addon="xbmc.python" version="3.0.1"/>
-        <import addon="script.module.pil" version="5.1.0"/>
     </requires>
     
     <!-- Script interface (for skin calls) -->
@@ -26,7 +25,7 @@
         <summary lang="en_GB">Flatscan Widgets for Kodi</summary>
         <description lang="en_GB">Modern widget and helper addon for Kodi skins. 
 Provides in-progress content, next-up episodes, similar items, 
-background blur effects, and more.</description>
+background fanart rotation, and more.</description>
         
         <platform>all</platform>
         <license>GPL-2.0-or-later</license>
