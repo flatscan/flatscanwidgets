@@ -46,7 +46,7 @@ URL/playability rules in `add_items_to_directory`:
 ## Library code ([resources/lib/](resources/lib/))
 
 - [addon.py](resources/lib/addon.py) — `ADDON` instance, paths, `get_setting(key, default)` (returns strings; compare bools as `== 'true'`). Creates the profile dir on import.
-- [kodi_utils.py](resources/lib/kodi_utils.py) — `json_rpc_call(method, params)` (returns parsed dict, `{}` on failure — always read via `.get('result', {}).get(...)`), window-property helpers, `notify`.
+- [kodi_utils.py](resources/lib/kodi_utils.py) — `json_rpc_call(method, params)` (returns parsed dict, `{}` on failure — always read via `.get('result', {}).get(...)`), `set_window_property`.
 - [cache.py](resources/lib/cache.py) — `read(name, max_age)` / `write(name, data)`: atomic JSON files in the add-on profile (`cache/`). Plugin calls are fresh processes, so this is the only cache that survives between widget loads. Used for Sonarr calendar data and season titles.
 - [logger.py](resources/lib/logger.py) — `log(message, level='DEBUG')`; levels are strings (`'DEBUG'`, `'INFO'`, `'WARNING'`, `'ERROR'`).
 - [widgets/](resources/lib/widgets/) — data providers. `BaseWidget` supplies reusable JSON-RPC filter/sort dicts (`get_inprogress_filter`, `get_unwatched_filter`, `get_recent_sort`, `get_lastplayed_sort`, `get_recentlyaired_sort`, `get_random_sort`). Property lists live as class constants (`MovieWidgets.MOVIE_PROPERTIES`, `TVShowWidgets.EPISODE_PROPERTIES` / `TVSHOW_PROPERTIES` / `SEASON_PROPERTIES`) and are reused across classes. `MixedWidgets` composes the other two.

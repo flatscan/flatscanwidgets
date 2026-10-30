@@ -14,7 +14,6 @@ addon_path = os.path.dirname(os.path.abspath(__file__))
 if addon_path not in sys.path:
     sys.path.insert(0, addon_path)
 
-from resources.lib.addon import ADDON
 from resources.lib.logger import log
 
 
@@ -52,11 +51,9 @@ def route_action(action, args):
     
     # INFO MODULE ACTIONS
     if action in ['tvshowdetails', 'seasondetails', 'showdetails']:
-        from resources.lib.info.tvshowdetails import TVShowDetails
         handle_tvshow_details(args)
-        
+
     elif action in ['pathstats', 'stats']:
-        from resources.lib.info.pathstats import PathStats
         handle_path_stats(args)
         
     # WIDGET REFRESH ACTIONS

@@ -6,7 +6,6 @@ Service entry point for Flatscan Widgets.
 """
 
 import sys
-import os
 import xbmcaddon
 
 # Get addon path and add to sys.path

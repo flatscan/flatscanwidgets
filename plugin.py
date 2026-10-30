@@ -16,7 +16,7 @@ if addon_path not in sys.path:
 
 import xbmcgui
 import xbmcplugin
-from resources.lib.addon import ADDON, get_setting
+from resources.lib.addon import get_setting
 from resources.lib.logger import log
 
 # WIDGET IMPORTS - Make sure these are here

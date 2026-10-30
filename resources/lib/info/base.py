@@ -5,7 +5,7 @@
 Base class for info providers.
 """
 
-from resources.lib.kodi_utils import json_rpc_call, set_window_property
+from resources.lib.kodi_utils import set_window_property
 from resources.lib.logger import log
 
 
