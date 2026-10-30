@@ -9,7 +9,7 @@ __pycache__/
 *.db
 
 # IDE
-.vscode/settings.json  # Optional: keep settings.json.template instead
+.vscode/settings.json
 .idea/
 
 # OS

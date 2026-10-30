@@ -272,26 +272,3 @@ class MovieWidgets(BaseWidget):
             'sort': self.get_random_sort()
         })
         return result.get('result', {}).get('movies', [])
-        
-    def get_by_genre(self, genre, limit=20):
-        """
-        Get movies by genre.
-        
-        Args:
-            genre: Genre name
-            limit: Maximum number of items
-            
-        Returns:
-            List of movie dicts
-        """
-        result = json_rpc_call('VideoLibrary.GetMovies', {
-            'properties': self.MOVIE_PROPERTIES,
-            'limits': {'start': 0, 'end': limit},
-            'sort': self.get_random_sort(),
-            'filter': {
-                'field': 'genre',
-                'operator': 'contains',
-                'value': genre
-            }
-        })
-        return result.get('result', {}).get('movies', [])

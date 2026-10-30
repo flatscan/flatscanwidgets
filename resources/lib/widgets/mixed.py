@@ -18,8 +18,7 @@ class MixedWidgets(BaseWidget):
     This is where the addon's real power is - Kodi can't do this natively.
     """
     
-    def __init__(self, handle=None):
-        super().__init__(handle)
+    def __init__(self):
         self.movies = MovieWidgets()
         self.shows = TVShowWidgets()
         
@@ -71,7 +70,7 @@ class MixedWidgets(BaseWidget):
         Returns:
             List of suggested movie and episode dicts
         """
-        log(f'Getting suggestions based on watched history')
+        log('Getting suggestions based on watched history')
         
         # Get recently watched movies for genre analysis
         watched_movies = json_rpc_call('VideoLibrary.GetMovies', {
@@ -80,15 +79,7 @@ class MixedWidgets(BaseWidget):
             'sort': {'order': 'descending', 'method': 'lastplayed'},
             'filter': {'field': 'playcount', 'operator': 'greaterthan', 'value': '0'}
         }).get('result', {}).get('movies', [])
-        
-        # Get recently watched episodes
-        watched_eps = json_rpc_call('VideoLibrary.GetEpisodes', {
-            'properties': ['showtitle', 'lastplayed'],
-            'limits': {'start': 0, 'end': 10},
-            'sort': {'order': 'descending', 'method': 'lastplayed'},
-            'filter': {'field': 'playcount', 'operator': 'greaterthan', 'value': '0'}
-        }).get('result', {}).get('episodes', [])
-        
+
         # Extract genres from watched movies
         genres = set()
         for movie in watched_movies:

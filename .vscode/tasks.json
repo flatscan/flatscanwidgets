@@ -7,7 +7,7 @@
             "command": "robocopy",
             "args": [
                 "${workspaceFolder}",
-                "C:\\Users\\edjackson\\AppData\\Roaming\\Kodi\\addons\\script.flatscan.widgets",
+                "${env:APPDATA}\\Kodi\\addons\\script.flatscan.widgets",
                 "/MIR",
                 "/XD",
                 ".git",
