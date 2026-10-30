@@ -62,12 +62,15 @@ def create_listitem(item_data, content_type):
         # watched = item_data.get('watchedepisodes', 0)
         label2 = f"{episode_count} new episodes"
     elif content_type == 'season':
-        # Custom label: "Show Name - Season X" 
-        showtitle = item_data.get('tvshowtitle', '')
-        season_title = item_data.get('season_title', '')
-        episode_count = item_data.get('episode_count', 0)
+        # Custom label: "Show Name - Season X". Grouped seasons (recently
+        # added) carry custom keys; plain seasons have Kodi's own fields.
+        showtitle = item_data.get('tvshowtitle') or item_data.get('showtitle', '')
+        season_title = item_data.get('season_title') or item_data.get('title', '')
         label = f"{showtitle} - {season_title}"
-        label2 = f"{episode_count} new episodes"
+        if item_data.get('is_group'):
+            label2 = f"{item_data.get('episode_count', 0)} new episodes"
+        else:
+            label2 = f"{item_data.get('episode', 0)} episodes"
     elif content_type == 'movie':
         label = item_data.get('title', '')
         label2 = str(item_data.get('year', ''))
