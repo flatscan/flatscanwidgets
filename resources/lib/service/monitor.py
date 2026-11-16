@@ -14,7 +14,6 @@ if addon_root not in sys.path:
     sys.path.insert(0, addon_root)
 
 import xbmc
-import xbmcgui
 from resources.lib.addon import ADDON
 from resources.lib.logger import log
 from resources.lib.service.fanart_service import FanartService
@@ -103,15 +102,11 @@ class ServiceMonitor(xbmc.Monitor):
             method: Notification method
             data: Notification data
         """
-        # Handle library updates
+        # Library updates. Kodi itself reloads every widget whose items carry a
+        # video info tag on these (and on Player.OnPlay/OnStop), so no widget
+        # refresh signal is sent here; only cached data and artwork are renewed.
         if method in ['VideoLibrary.OnUpdate', 'VideoLibrary.OnScanFinished']:
             log(f'Service: Library update detected ({method})')
-            # Trigger widget refresh via window property
-            xbmcgui.Window(10000).setProperty('FlatscanWidgetUpdate', '1')
-            xbmc.sleep(100)
-            xbmcgui.Window(10000).clearProperty('FlatscanWidgetUpdate')
-
-            # Re-warm artwork and refresh cached data for the changed library
             self.artwork_cache.request_refresh()
 
         # Restart requested by RunScript(script.flatscan.widgets,action=restartservice)

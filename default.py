@@ -124,20 +124,21 @@ def handle_widget_refresh(args):
     """
     Handle widget refresh action.
 
-    Pulses the FlatscanWidgetUpdate home window property, the same signal the
-    service sends when the video library updates, so skins can reload widgets.
+    Sets the FlatscanWidgetUpdate home window property to a new value, so a
+    widget whose path ends in &reload=$INFO[Window(Home).Property(FlatscanWidgetUpdate)]
+    reloads once. A widget that is hidden at the time picks up the new value
+    when it is next shown. Library changes and playback start/stop need no
+    call: Kodi reloads widgets with library items on those by itself.
 
     Usage: RunScript(script.flatscan.widgets,action=refreshwidgets)
     """
-    import xbmc
+    import time
     import xbmcgui
 
-    window = xbmcgui.Window(10000)
-    window.setProperty('FlatscanWidgetUpdate', '1')
-    xbmc.sleep(100)
-    window.clearProperty('FlatscanWidgetUpdate')
+    value = str(int(time.time() * 1000))
+    xbmcgui.Window(10000).setProperty('FlatscanWidgetUpdate', value)
 
-    log('Widget refresh: Pulsed FlatscanWidgetUpdate')
+    log(f'Widget refresh: FlatscanWidgetUpdate set to {value}')
 
 
 def handle_service_restart(args):
