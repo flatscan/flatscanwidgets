@@ -1,0 +1,25 @@
+name: Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  unittest:
+    # ubuntu-22.04 still has Python 3.8 builds for setup-python
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.8 is the oldest Python a Kodi 21 build embeds; 3.12 catches newer-Python breakage
+        python-version: ['3.8', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Byte-compile the add-on
+        run: python -m compileall -q plugin.py default.py service.py resources tests
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -t . -v

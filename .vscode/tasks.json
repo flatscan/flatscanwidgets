@@ -13,6 +13,8 @@
                 ".git",
                 ".vscode",
                 "__pycache__",
+                ".github",
+                "tests",
                 "/XF",
                 ".gitignore",
                 ".gitattributes",
