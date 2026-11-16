@@ -15,7 +15,7 @@ Install the Flatscan repository once, and Kodi will keep the add-on up to date:
 3. **Install from zip file → flatscan** and pick `repository.flatscan-<version>.zip`.
 4. **Install from repository → Flatscan Repository → Video add-ons** (the add-on also shows under Program add-ons and Services) and install **Flatscan Widgets**.
 
-**Unknown sources** is only needed to install the repository zip, so you can switch it off again afterwards.
+**Unknown sources** is needed for any zip installed directly from a file source, including the repository and manual add-on zips, so you can switch it off again afterwards.
 
 ### Manual install
 
