@@ -9,3 +9,5 @@
 CLAUDE.md export-ignore
 README.md export-ignore
 TODO.md export-ignore
+.github export-ignore
+tests export-ignore
