@@ -215,6 +215,14 @@ def create_listitem(item_data, content_type):
         li.setProperty('NextTitle', item_data.get('next_title', ''))
         li.setIsFolder(True)
 
+    else:
+        # Genre and statistics items. A video info tag shows their plot and
+        # makes Kodi reload the widget on library changes, as it does for
+        # widgets of library items.
+        infotag = li.getVideoInfoTag()
+        infotag.setTitle(item_data.get('title', ''))
+        infotag.setPlot(item_data.get('plot', ''))
+
     # Add DBID property
     dbid = (item_data.get('tvshowid') or item_data.get('movieid') or item_data.get('episodeid')
             or item_data.get('setid', ''))
@@ -289,6 +297,10 @@ def add_items_to_directory(items, content_type, category=''):
 
         elif item_type == 'set':
             url = f'videodb://movies/sets/{item.get("setid")}/'
+            is_folder = True
+
+        elif item_type == 'genre':
+            url = f'videodb://tvshows/genres/{item.get("genreid")}/'
             is_folder = True
 
         else:
@@ -390,19 +402,6 @@ def route_tvshowsbyrandomgenre(w, params, limit):
     return w.shows.get_by_random_genre(limit=limit), 'tvshow', 'TV Shows by Genre'
 
 
-@route('tvsuggestions', 'tvshows', 'Suggestions')
-def route_tvsuggestions(w, params, limit):
-    return w.shows.get_suggestions(limit=limit), 'tvshow', 'Suggested TV Shows'
-
-
-@route('tvsimilar')
-def route_tvsimilar(w, params, limit):
-    dbid = params.get('dbid')
-    if not dbid:
-        return None
-    return w.shows.get_similar(dbid, limit=limit), 'tvshow', 'Similar TV Shows'
-
-
 @route('seasons')
 def route_seasons(w, params, limit):
     dbid = params.get('dbid')
@@ -464,43 +463,11 @@ def route_inprogressmedia(w, params, limit):
     return w.mixed.get_inprogress_media(limit=limit), 'video', 'Continue Watching'
 
 
-@route('suggestions', 'mixed', 'Suggestions')
-def route_suggestions(w, params, limit):
-    return w.mixed.get_suggestions_based_on_watched(limit=limit), 'video', 'Suggestions'
-
-
 @route('byrandomgenre')
 def route_byrandomgenre(w, params, limit):
     result = w.mixed.get_by_random_genre(limit=limit)
     genre = result.get('genre', 'Random')
     return result.get('items', []), 'video', f'{genre} Movies & Shows'
-
-
-@route('similarmovies')
-def route_similarmovies(w, params, limit):
-    dbid = params.get('dbid')
-    if not dbid:
-        log('similarmovies: No dbid provided')
-        return None
-    return w.mixed.get_similar_to_current(dbid, 'movie', limit=limit), 'movie', 'Similar Movies'
-
-
-@route('similartvshows')
-def route_similartvshows(w, params, limit):
-    dbid = params.get('dbid')
-    if not dbid:
-        log('similartvshows: No dbid provided')
-        return None
-    return w.mixed.get_similar_to_current(dbid, 'tvshow', limit=limit), 'tvshow', 'Similar TV Shows'
-
-
-@route('morebyactor')
-def route_morebyactor(w, params, limit):
-    actor = params.get('actor')
-    if not actor:
-        log('morebyactor: No actor provided')
-        return None
-    return w.mixed.get_more_by_actor(actor, limit=limit), 'movie', f'Movies with {actor}'
 
 
 # ----- Info-based widgets (using the info module) -----

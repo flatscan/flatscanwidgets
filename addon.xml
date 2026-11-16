@@ -23,7 +23,7 @@
 
     <extension point="xbmc.addon.metadata">
         <summary lang="en_GB">Widgets and skin helpers for Kodi</summary>
-        <description lang="en_GB">Widget paths and skin helpers for Kodi skins: Next Up, in-progress and recently added media (grouped by show and season), recently aired and recently released, upcoming episodes from Sonarr, movie collections in progress, suggestions and similar items, path statistics, and background fanart rotation.</description>
+        <description lang="en_GB">Widget paths and skin helpers for Kodi skins: Next Up, in-progress and recently added media (grouped by show and season), recently aired and recently released, upcoming episodes from Sonarr, movie collections in progress, path statistics, and background fanart rotation.</description>
 
         <platform>all</platform>
         <license>GPL-2.0-or-later</license>

@@ -44,8 +44,6 @@ plugin://script.flatscan.widgets/?info=<widget>&limit=<n>
 | `upcomingepisodes` | Upcoming episodes from Sonarr (needs [Sonarr](#sonarr-integration) enabled). Items are informational and not playable | `days` (default: the *Days Ahead* setting) |
 | `tvshowgenres` | TV show genres | |
 | `tvshowsbyrandomgenre` | Shows from a random genre | |
-| `tvsuggestions` | Suggested shows | |
-| `tvsimilar` | Shows similar to a given show | `dbid` *(required)* |
 | `seasons` | Seasons of a show | `dbid` *(required)* |
 | `episodes` | Episodes of a season | `dbid`, `season` *(required)* |
 
@@ -65,11 +63,7 @@ plugin://script.flatscan.widgets/?info=<widget>&limit=<n>
 | `info` | Description | Extra params |
 |---|---|---|
 | `inprogressmedia` | Continue watching | |
-| `suggestions` | Suggestions based on watch history | |
 | `byrandomgenre` | Movies and shows from a random genre | |
-| `similarmovies` | Movies similar to a given movie | `dbid` *(required)* |
-| `similartvshows` | Shows similar to a given show | `dbid` *(required)* |
-| `morebyactor` | Movies featuring an actor | `actor` *(required)* |
 
 ### Info widgets
 
@@ -94,7 +88,7 @@ Call with `RunScript(script.flatscan.widgets,action=<action>,...)`.
 |---|---|---|
 | `tvshowdetails` / `seasondetails` / `showdetails` | `dbid` *(required)*, `idtype` (default `season`), `window` (default 10000) | Sets TV show detail window properties |
 | `pathstats` / `stats` | `path` *(required)*, `prop` (default `PathStats`), `window` (default 10000) | Sets `<prop>.Count`, `.Watched`, `.Unwatched`, `.InProgress` (plus `.Episodes`, `.WatchedEpisodes`, `.UnwatchedEpisodes` for TV paths) |
-| `refreshwidgets` | | Pulses the `FlatscanWidgetUpdate` home window property (same signal the service sends on library updates) |
+| `refreshwidgets` | | Sets the `FlatscanWidgetUpdate` home window property to a new value, reloading widgets that use it (see [Refreshing widgets](#refreshing-widgets)) |
 | `restartservice` | | Asks the background service to restart and re-read its settings |
 
 Example:
@@ -110,10 +104,22 @@ When enabled, the service:
 - Rotates random fanart from movies, TV shows and music artists, exposed through the `FlatscanBackground`, `FlatscanBackgroundTitle` and `FlatscanBackgroundType` home window properties.
 - Warms Kodi's texture cache for the artwork your widgets display, so rows paint quickly instead of waiting on remote image downloads. It re-runs when the video library updates and every ten minutes, and caches a limited number of images per run (the rest follow on the next run).
 - Keeps the Sonarr calendar cached on disk so the Upcoming Episodes widget does not wait on the network.
-- Sets the `FlatscanWidgetUpdate` home window property briefly (about 100 ms) whenever the video library updates, so skins can refresh widgets.
 - Pauses during the screensaver and restarts when settings change.
 
-To refresh a skin container when the library changes, key it off the property, for example with a visibility or reload condition on `Window(Home).Property(FlatscanWidgetUpdate)`.
+### Refreshing widgets
+
+Kodi reloads these widgets by itself, so most skins need nothing extra:
+
+- **When the video library changes** (scan or clean finished, an item added, removed or updated, including the resume point and watched state Kodi saves when playback stops).
+- **When playback starts, resumes or stops**, unless the skin sets a `sortby` on the widget's `<content>` other than `lastplayed` or `playcount`.
+
+To force a reload at other times, add the `FlatscanWidgetUpdate` property to the widget path and call `RunScript(script.flatscan.widgets,action=refreshwidgets)`:
+
+```xml
+<content>plugin://script.flatscan.widgets/?info=upcomingepisodes&amp;reload=$INFO[Window(Home).Property(FlatscanWidgetUpdate)]</content>
+```
+
+Each call sets the property to a new value, so the widget reloads once; a widget that is hidden at the time reloads when it is next shown. Don't add the property to widgets that don't need it: on a library change they would reload twice.
 
 ## Settings
 
@@ -137,7 +143,7 @@ The calendar is cached on disk for up to 30 minutes, and the background service 
 ## Troubleshooting
 
 - **Enable debug logging** in the General settings. Without it, the add-on's debug messages are hidden; with it, they appear at INFO level in `kodi.log`. Look for lines containing `script.flatscan.widgets`.
-- **A widget is empty:** check that required parameters (`dbid`, `season`, `actor`, `path`) are present, and look for `Error in router` in the log.
+- **A widget is empty:** check that required parameters (`dbid`, `season`, `path`) are present, and look for `Error in router` in the log.
 - **Upcoming Episodes is empty:** confirm Sonarr is enabled, the URL is reachable from the Kodi device, and the API key is correct. Failures are logged as `Sonarr API error`.
 - **Images pop in late on the first view:** artwork is downloaded the first time Kodi displays it. Keep *Pre-cache widget artwork* enabled so the background service does this ahead of time; with debug logging on you will see `ArtworkCache:` lines in the log.
 - **The first Upcoming Episodes load is slow:** with an empty cache the widget has to fetch from Sonarr itself. It is fast once the service has refreshed the cache.

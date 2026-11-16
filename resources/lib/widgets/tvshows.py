@@ -678,6 +678,7 @@ class TVShowWidgets(BaseWidget):
         genres = result.get('result', {}).get('genres', [])
         for genre in genres:
             genre['mediatype'] = 'genre'
+            genre['title'] = genre.get('label', '')
             
         return genres
     
@@ -808,82 +809,3 @@ class TVShowWidgets(BaseWidget):
         end = (datetime.now() + timedelta(days=days)).strftime('%Y-%m-%d')
         items = [i for i in items if today <= i.get('firstaired', '') <= end]
         return items[:limit]
-
-    def get_suggestions(self, limit=20):
-        """
-        Get TV show suggestions based on watched history.
-        Finds unwatched shows in genres of watched shows.
-        """
-        log(f'Getting TV show suggestions (limit: {limit})')
-        
-        # Get recently watched shows
-        watched_result = json_rpc_call('VideoLibrary.GetTVShows', {
-            'properties': ['genre', 'lastplayed'],
-            'limits': {'start': 0, 'end': 10},
-            'sort': {'order': 'descending', 'method': 'lastplayed'},
-            'filter': {'field': 'playcount', 'operator': 'greaterthan', 'value': '0'}
-        })
-        
-        watched = watched_result.get('result', {}).get('tvshows', [])
-        
-        # Extract genres from watched shows
-        genres = set()
-        for show in watched:
-            for genre in show.get('genre', []):
-                genres.add(genre.lower())
-        
-        # Get unwatched shows from those genres
-        suggestions = []
-        if genres:
-            for genre in list(genres)[:3]:
-                result = json_rpc_call('VideoLibrary.GetTVShows', {
-                    'properties': self.TVSHOW_PROPERTIES,
-                    'limits': {'start': 0, 'end': limit // len(genres)},
-                    'sort': {'method': 'random'},
-                    'filter': {
-                        'and': [
-                            {'field': 'genre', 'operator': 'contains', 'value': genre},
-                            {'field': 'playcount', 'operator': 'is', 'value': '0'}
-                        ]
-                    }
-                })
-                shows = result.get('result', {}).get('tvshows', [])
-                for show in shows:
-                    show['mediatype'] = 'tvshow'
-                    show['suggestion_reason'] = f'Similar to {genre} shows you watched'
-                suggestions.extend(shows)
-        
-        random.shuffle(suggestions)
-        return suggestions[:limit]
-    
-    def get_similar(self, dbid, limit=20):
-        """Get TV shows similar to the specified show."""
-        log(f'Getting shows similar to {dbid}')
-        
-        # Get reference show details
-        result = json_rpc_call('VideoLibrary.GetTVShowDetails', {
-            'tvshowid': int(dbid),
-            'properties': ['genre', 'studio']
-        })
-        
-        reference = result.get('result', {}).get('tvshowdetails', {})
-        genres = reference.get('genre', [])
-        
-        if not genres:
-            return []
-            
-        # Find shows with matching genres. tvshowid is not a filter field, so
-        # fetch one extra and drop the reference show here.
-        similar = json_rpc_call('VideoLibrary.GetTVShows', {
-            'properties': self.TVSHOW_PROPERTIES,
-            'limits': {'start': 0, 'end': limit + 1},
-            'sort': {'method': 'random'},
-            'filter': {'field': 'genre', 'operator': 'contains', 'value': genres[0]}
-        }).get('result', {}).get('tvshows', [])
-
-        similar = [show for show in similar if show.get('tvshowid') != int(dbid)][:limit]
-
-        for show in similar:
-            show['mediatype'] = 'tvshow'
-
-        return similar

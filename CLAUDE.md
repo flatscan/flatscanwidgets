@@ -25,7 +25,7 @@ Kodi 21 (Omega) add-on `script.flatscan.widgets`: widget paths, skin helper acti
 Each entry point inserts the add-on root into `sys.path` so `from resources.lib...` imports work. New modules must use absolute `resources.lib.` imports (or relative within a package).
 
 Cross-process signals:
-- `FlatscanWidgetUpdate` home property is pulsed (~100 ms) by the service on `VideoLibrary.OnUpdate`/`OnScanFinished` and by the `refreshwidgets` script action.
+- `FlatscanWidgetUpdate` home property is set to a new value (a millisecond timestamp) by the `refreshwidgets` script action, for skins that append it as `&reload=` to a widget path. The service does not touch it: Kodi's `CDirectoryProvider` already reloads a widget on `VideoLibrary` announcements when any of its items has a video info tag, and on `Player.OnPlay`/`OnResume`/`OnStop` when the `<content>` has no `sortby` (or sorts by last played / play count). So every ListItem gets an `InfoTagVideo`, even genre and stats items.
 - `restartservice` action sends `NotifyAll(script.flatscan.widgets,restart_service)`; the service receives it as `method == 'Other.restart_service'` in `ServiceMonitor.onNotification`.
 - Fanart rotation writes `FlatscanBackground`, `FlatscanBackgroundTitle`, `FlatscanBackgroundType`.
 
@@ -33,7 +33,7 @@ Cross-process signals:
 
 [plugin.py](plugin.py) is the core:
 
-1. `@route(info, category=None, label=None)` registers a handler in `ROUTES`. Routes with a category/label also appear in the browsable menu (root → category → widgets, in definition order). Routes without them (`tvsimilar`, `seasons`, `episodes`, `similarmovies`, …) are path-only.
+1. `@route(info, category=None, label=None)` registers a handler in `ROUTES`. Routes with a category/label also appear in the browsable menu (root → category → widgets, in definition order). Routes without them (`seasons`, `episodes`, `byrandomgenre`, …) are path-only.
 2. A handler has signature `(w, params, limit)` where `w` is a `Widgets` bundle (`w.shows`, `w.movies`, `w.mixed`) and returns `(items, mediatype, label)` or `None` to fail the directory (missing required param, feature disabled).
 3. `router()` parses params, defaults `limit` to 100, calls the handler, and catches all exceptions (logged as `Error in router`).
 4. `add_items_to_directory` / `create_listitem` turn item dicts into `xbmcgui.ListItem`s using the `InfoTagVideo` API (not deprecated `setInfo`). Per-item `mediatype` overrides the route's content type, which is how mixed widgets work.
