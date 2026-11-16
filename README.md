@@ -41,7 +41,7 @@ plugin://script.flatscan.widgets/?info=<widget>&limit=<n>
 | `recentlyaired` | Episodes that aired in the last N days, newest first. Episodes not yet aired are excluded | `days` (default 90) |
 | `recenttvshows` | Recently updated shows | |
 | `recentlyaddedgrouped` | Recently added episodes, grouped into season/show items (episodes added within 20 hours of each other are grouped) | `days` (default 30) |
-| `upcomingepisodes` | Upcoming episodes from Sonarr (needs [Sonarr](#sonarr-integration) enabled). Items are informational and not playable | `days` (default: the *Days Ahead* setting) |
+| `upcomingepisodes` | Upcoming episodes from Sonarr (needs [Sonarr](#sonarr-integration) enabled). Items are informational and not playable. They have no `dbid` (the show may not be in the library); `ListItem.Property(TvdbId)` holds the show's TVDB id | `days` (default: the *Days Ahead* setting) |
 | `tvshowgenres` | TV show genres | |
 | `tvshowsbyrandomgenre` | Shows from a random genre | |
 | `seasons` | Seasons of a show | `dbid` *(required)* |

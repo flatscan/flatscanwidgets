@@ -42,7 +42,8 @@ class TVShowWidgets(BaseWidget):
 
     # Sonarr calendar cache: always fetched for the maximum Days Ahead setting
     # and filtered per widget, so one cache entry serves every `days` value.
-    SONARR_CACHE_NAME = 'sonarr_upcoming'
+    # v2: items carry sonarr_tvdbid instead of tvshowid (1.0.1 and earlier)
+    SONARR_CACHE_NAME = 'sonarr_upcoming_v2'
     SONARR_CACHE_DAYS = 30
     SONARR_CACHE_MAX_AGE = 30 * 60
 
@@ -743,7 +744,9 @@ class TVShowWidgets(BaseWidget):
                     'firstaired': ep.get('airDate', ''),
                     'mediatype': 'episode',
                     'plot': ep.get('overview', ''),
-                    'tvshowid': series.get('tvdbId', 0),
+                    # Sonarr's TVDB id, kept apart from Kodi's tvshowid so it
+                    # is never mistaken for a library DBID
+                    'sonarr_tvdbid': series.get('tvdbId', 0),
                     'art': art,
                 })
 

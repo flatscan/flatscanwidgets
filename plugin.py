@@ -148,6 +148,9 @@ def create_listitem(item_data, content_type):
             })
             # Not playable - no file yet
             li.setProperty('IsPlayable', 'false')
+            # Sonarr's TVDB id. Not a Kodi DBID, so the dbid property stays empty
+            if item_data.get('sonarr_tvdbid'):
+                li.setProperty('TvdbId', str(item_data['sonarr_tvdbid']))
         else:
             # Regular episode with file - playable
             infotag = li.getVideoInfoTag()
